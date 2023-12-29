@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "bivarcontours"
+version = "0.1.0"
+description = "A Function-based Unit-Aware Contour Diagram Generator which generates a contour plot of an arbitrary function with two independent variables"
+authors = ["Uwe Schweinsberg"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12.1"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
