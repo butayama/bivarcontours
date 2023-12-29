@@ -21,13 +21,13 @@ extensions = [
     "myst_nb",
     "autoapi.extension",
     "sphinx.ext.napoleon",
-    "sphinx.ext.viewcode",
-    "sphinx.ext.autodoc",
-    "sphinx.ext.intersphinx",
-    "sphinxcontrib.log_cabinet",
-    "pallets_sphinx_themes",
-    "sphinx_issues",
-    "sphinx_tabs.tabs"
+    # "sphinx.ext.viewcode",
+    # "sphinx.ext.autodoc",
+    # "sphinx.ext.intersphinx",
+    # "sphinxcontrib.log_cabinet",
+    # "pallets_sphinx_themes",
+    # "sphinx_issues",
+    # "sphinx_tabs.tabs"
 ]
 autoapi_dirs = ["../src"]
 
