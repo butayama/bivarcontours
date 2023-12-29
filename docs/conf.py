@@ -9,6 +9,8 @@
 project = u"bivarcontours"
 copyright = u"2023, Uwe Schweinsberg"
 author = u"Uwe Schweinsberg"
+version = '0.1.0'  # The short X.Y version
+release = '0.1.0'  # The full version, including alpha/beta/rc tags
 
 # -- General configuration ---------------------------------------------------
 
@@ -20,6 +22,12 @@ extensions = [
     "autoapi.extension",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.intersphinx",
+    "sphinxcontrib.log_cabinet",
+    "pallets_sphinx_themes",
+    "sphinx_issues",
+    "sphinx_tabs.tabs"
 ]
 autoapi_dirs = ["../src"]
 

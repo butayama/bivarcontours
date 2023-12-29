@@ -16,16 +16,16 @@ they are in the correct form/type. Depending on the rest of the program it could
 incorrect data types are passed.
 
 * click expects x_start to be a float. If the user passes a string that cannot be converted to a float, click will
-raise an error. This is a simple form of type-checking that works very well at the boundaries of your systems
-(where your function interacts with the user).
+    raise an error. This is a simple form of type-checking that works very well at the boundaries of your systems
+    (where your function interacts with the user).
 
-However, keep in mind that click type checking does not substitute good practices inside your code. It aids in
-making sure inputs are of correct type but proper error handling, input checking, and type checking inside your
-functions and methods are still very important.
+* However, keep in mind that click type checking does not substitute good practices inside your code. It aids in
+    making sure inputs are of correct type but proper error handling, input checking, and type checking inside your
+    functions and methods are still very important.
 
-Moreover, since Python is a dynamically typed language, the type of a variable can change during program execution.
-Therefore, having type checks at critical points in your code (not just at the entry points) can help
-prevent type-related bugs.
+* Moreover, since Python is a dynamically typed language, the type of a variable can change during program execution.
+    Therefore, having type checks at critical points in your code (not just at the entry points) can help
+    prevent type-related bugs.
 
 * Potential division by zero: In the compute_values function, if self.arr_step_1 or self.arr_step_2 is zero, it would
     lead to ValueError.

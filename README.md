@@ -2,10 +2,13 @@
 
 A Function-based Unit-Aware Contour Diagram Generator which generates a contour plot of an arbitrary function with two independent variables
 
-## Installation
+## **not yet deployed at PyPi**
+before deployment docs and tests are to be edited / written
 
+## Installation
+**not possible yet**
 ```bash
-$ pip install bivarcontours
+~~$ pip install bivarcontours
 ```
 
 ## Usage
