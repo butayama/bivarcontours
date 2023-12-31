@@ -25,10 +25,7 @@ def test_calculate_z():
 
 
 def test_unit_validation():
-    # pounds and inches are valid units
     unit_validation(['pound', 'inch'])
-
-    # bogus1 and bogus2 are not valid units, so it should raise an error.
     with pytest.raises(UnitError):
         unit_validation(['bogus1', 'bogus2'])
 
@@ -37,7 +34,7 @@ def test_contour_init():
     # Test valid instance
     contour = Contour('title', 'label_1', 'label_2', 'x + y', 'inch',
                       1, 2, 0.1, 'week', 3, 4, 0.2, 'mile', 'false')
-    pytest.assertIsInstance(contour, Contour)
+    assert isinstance(contour, Contour)
 
     # Test invalid dimensions
     with pytest.raises(UnitError):
@@ -81,7 +78,7 @@ def test_contour_initialize_dimension_two_values():
     assert contour.start_2 is not None
 
 
-def test_contour_methods():
+def test_contour_methods_swap_axes_false():
     contour = Contour('title', 'label_1', 'label_2', 'x + y', 'inch',
                       1, 2, 0.1, 'mm', 3, 4, 0.2, 'mile', 'false')
 
@@ -111,3 +108,7 @@ def test_contour_methods():
     contour.compute_values()
     assert contour.vals is not None
     assert contour.hl is not None
+
+# def test_contour_methods_swap_axes_true():
+#     contour = Contour('title', 'label_1', 'label_2', 'x + y', 'inch',
+#                       1, 2, 0.1, 'mm', 3, 4, 0.2, 'mile', 'true')

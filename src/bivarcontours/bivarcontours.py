@@ -40,7 +40,10 @@ from matplotlib.ticker import ScalarFormatter, NullFormatter
 from numpy import sqrt
 import seaborn as sns
 import numpy as np
-from pint import UnitRegistry, UndefinedUnitError, DimensionalityError
+from pint import UnitRegistry, UndefinedUnitError, DimensionalityError, Quantity, Unit
+from sympy import symbols, N
+from sympy.parsing.sympy_parser import parse_expr
+import sympy.physics.units as sympy_units
 
 ureg = UnitRegistry()
 Q_ = ureg.Quantity
@@ -51,15 +54,82 @@ TITLE_FONTWEIGHT = 'bold'
 MAX_DISPLAY_DIGITS = 4
 SCALING_EXPONENT = 3
 SCALING_FACTOR = 10 ** SCALING_EXPONENT
+X, Y = symbols('X Y')
+
+
+def to_sympy(quantity: Quantity):
+    # divide and extract the magnitude from the units: it will generate a two elements tuple, where the first item
+    # will be the magnitude and the second ona a tuple of tuples; each nested tuple is composed by two elements,
+    # the unit proper and the exponent to which is elevated; the tuples are supposed to be multiplied together.
+
+    # quantity is multiplied by 1 so that it is converted to pint.Quantity if pint.Unit is passed instead
+    magnitude, units = (1 * quantity).to_tuple()
+
+    # for each unit (i.e. tuple), check if it exists in the sympy.physics.units module
+    for ut in units:
+        fullname = ut[0]
+        shortname = f'{Unit(fullname):~}'
+        exponent = ut[1]
+
+        # add a new unit if it doesn't exist
+        if not hasattr(sympy_units, fullname):
+            setattr(sympy_units, fullname,
+                    sympy_units.Quantity(fullname, abbrev=shortname))  # create the new sympy unit with full name
+            setattr(sympy_units, shortname, getattr(sympy_units, fullname))  # create the alias with the shortname
+
+        # multiply magnitude for the sympy units (create a sympy.core.Mul object)
+        magnitude *= getattr(sympy_units, fullname) ** exponent
+
+    return magnitude
 
 
 def calculate_z(formula_, x, y):
+    """
+    using eval() in unsafe environments e.g. Webserver is evil.
+    Using SymPy's parse_expr is generally safe when considering injecting malicious code, as parse_expr will only
+    interpret mathematical expressions and not arbitrary Python code. This makes it inherently safer than functions
+    like eval() which can execute arbitrary Python code.
+
+    However, there are potential concerns to be aware of, including:
+    * Denial-of-Service (DoS) Attacks: While parse_expr doesn't execute arbitrary Python code, a user could, in theory,
+    input an extremely complicated mathematical expression that takes a lot of server resources to compute, leading
+    to a denial-of-service attack where your server becomes unresponsive.
+
+    * Input validation: You should always properly validate and sanitize any user input to prevent any potential
+    injection attacks or unexpected crashes due to faulty input.
+
+    Therefore, while SymPy's parse_expr is safer than eval(), it’s still important to treat all user-supplied data
+    with suspicion and ensure you have proper error handling and resource management in place to prevent potential
+    attacks or crashes.
+    The primary rule of accepting user input is: "Always validate user input thoroughly". Meaning, you should put
+    limits on input size, check for possible invalid characters or character sequences, etc.
+    You could also put a timeout limit on calculations to prevent your service from hanging on extremely
+    complex inputs.
+    Always remember that when it comes to security, there's more to consider than just whether a single function is
+    safe or not. A secure application/system requires an overall well-thought-out design.
+
+    :param formula_:
+    :param x:
+    :param y:
+    :return: z
+    """
     # formula_ = f(x,y)
-    # Test for Division by zero
     try:
-        z = eval(formula_)
+        x_base = to_sympy(x.to_base_units())
+    except AttributeError as e:  # x has no attribute 'to_base_units'
+        x_base = Q_(x, "m")
+        x_base = to_sympy(x.to_base_units())
+    try:
+        y_base = to_sympy(y.to_base_units())
+    except AttributeError as e:  # y has no attribute 'to_base_units'
+        y_base = Q_(y, "m")
+        y_base = to_sympy(y.to_base_units())
+    try:
+        substitutions = {X: x_base, Y: y_base}
+        z = N(parse_expr(formula_).subs(substitutions))
     except ZeroDivisionError as e:
         raise ZeroDivisionError("Division by zero: choose an other range for the x ond / or y variables", e)
+
     return z
 
 
@@ -170,22 +240,14 @@ class Contour:
         self.base_unit_1 = None
         self.start_1 = None
         self.unity_res = None
+        self.are_axes_swapped = swap_axes.lower() == 'true'
+        self.initialize_swapping_axes(label_1, label_2, min_1, max_1, step_1, dim_1, min_2, max_2, step_2, dim_2)
         self.title = title
-        self.label_1 = label_1
-        self.label_2 = label_2
         self.formula = formula
         self.dim_res = dim_res
-        self.min_1 = min_1
-        self.max_1 = max_1
-        self.step_1 = step_1
-        self.min_2 = min_2
-        self.max_2 = max_2
-        self.step_2 = step_2
-        self.are_axes_swapped = swap_axes.lower() == 'true'
-        self.initialize_swapping_axes(dim_1, dim_2)
         self.verbose = verbose
 
-    def initialize_swapping_axes(self, dim_1, dim_2):
+    def initialize_swapping_axes(self, label_1, label_2, min_1, max_1, step_1, dim_1, min_2, max_2, step_2, dim_2):
         """
         This method initializes the swapping of axes.
 
@@ -194,12 +256,29 @@ class Contour:
         :return: None
 
         """
+
         if self.are_axes_swapped:
-            self.dim_1 = dim_1
-            self.dim_2 = dim_2
-        else:
-            self.dim_2 = dim_1
+            self.label_1 = label_2
+            self.label_2 = label_1
+            self.min_1 = min_2
+            self.max_1 = max_2
+            self.step_1 = step_2
             self.dim_1 = dim_2
+            self.min_2 = min_1
+            self.max_2 = max_1
+            self.step_2 = step_1
+            self.dim_2 = dim_1
+        else:
+            self.label_1 = label_1
+            self.label_2 = label_2
+            self.min_1 = min_1
+            self.max_1 = max_1
+            self.step_1 = step_1
+            self.dim_1 = dim_1
+            self.min_2 = min_2
+            self.max_2 = max_2
+            self.step_2 = step_2
+            self.dim_2 = dim_2
 
     def initialize_values(self):
         """
@@ -504,7 +583,7 @@ def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_di
 
     """
     click.echo(
-        f"Running --c with title {title}, x_label {x_label}, y_label {y_label}, formula {formula}, x_start {x_start}, "
+        f"Running --cplot with title {title}, x_label {x_label}, y_label {y_label}, formula {formula}, x_start {x_start}, "
         f"x_stop {x_stop}, x_step {x_step}, x_dim {x_dim}, y_min {y_min}, y_max {y_max}, y_step {y_step}, "
         f"y_dim {y_dim}, swap_axes {swap_axes}, verbose {verbose}")
     label_x_dimension = Q_(1, x_dim).units
