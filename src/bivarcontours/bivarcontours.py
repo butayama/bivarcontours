@@ -34,15 +34,13 @@ incorrect data types are passed.
     with the np.arange function. The same goes for min_2 and max_2.
 """
 
-import math
-
 import click
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter, NullFormatter
 from numpy import sqrt
 import seaborn as sns
 import numpy as np
-from pint import UnitRegistry
+from pint import UnitRegistry, UndefinedUnitError, DimensionalityError
 
 ureg = UnitRegistry()
 Q_ = ureg.Quantity
@@ -55,16 +53,38 @@ SCALING_EXPONENT = 3
 SCALING_FACTOR = 10 ** SCALING_EXPONENT
 
 
-def calculate_z(formula_, x_scalar_, y_scalar_):
+def calculate_z(formula_, x, y):
     # formula_ = f(x,y)
-    x = x_scalar_
-    y = y_scalar_
     # Test for Division by zero
     try:
         z = eval(formula_)
     except ZeroDivisionError as e:
-        raise ZeroDivisionError("Division by zero: choose an other ranges for the x ond / or y variables", e)
+        raise ZeroDivisionError("Division by zero: choose an other range for the x ond / or y variables", e)
     return z
+
+
+class UnitError(Exception):
+    """Exception raised for errors in the input unit."""
+
+    def __init__(self, message="Invalid unit"):
+        self.message = message
+        super().__init__(self.message)
+
+
+def unit_validation(dims):
+    """
+    Check if the given dimensions are valid units using the `pint` module.
+
+    :param dims: A list of dimensions to be validated
+    :type dims: list
+
+    :raises UnitError: If a dimension is not defined in the `pint` module
+    """
+    for dim in dims:
+        try:
+            test_quantity = Q_(1, dim)  # Creates a Quantity with magnitude 1 and the specified unit
+        except UndefinedUnitError as e:
+            raise UnitError(f"Dimension {dim} is not defined in the pint module") from e
 
 
 class Contour:
@@ -108,6 +128,28 @@ class Contour:
 
     def __init__(self, title, label_1, label_2, formula, dim_res, min_1, max_1, step_1, dim_1, min_2, max_2, step_2,
                  dim_2, swap_axes, verbose=False):
+        # type checks
+        assert isinstance(title, str), "title should be a string"
+        assert isinstance(label_1, str), "label_1 should be a string"
+        assert isinstance(label_2, str), "label_2 should be a string"
+        assert isinstance(formula, str), "formula should be a string"
+        assert isinstance(min_1, (int, float)), "min_1 should be a number"
+        assert isinstance(max_1, (int, float)), "max_1 should be a number"
+        assert isinstance(step_1, (int, float)), "step_1 should be a number"
+        assert isinstance(min_2, (int, float)), "min_2 should be a number"
+        assert isinstance(max_2, (int, float)), "max_2 should be a number"
+        assert isinstance(step_2, (int, float)), "step_2 should be a number"
+        assert isinstance(swap_axes, str), "swap_axes should be a string"
+        assert isinstance(verbose, bool), "verbose should be a boolean"
+
+        # value checks
+        unit_validation([dim_res, dim_1, dim_2])
+        assert min_1 < max_1, "min_1 should be less than max_1"
+        assert min_2 < max_2, "min_2 should be less than max_2"
+        assert step_1 > 0, "step_1 should be a positive number"
+        assert step_2 > 0, "step_2 should be a positive number"
+        assert swap_axes.lower() in ["true", "false"], "swap_axes should be either 'true' or 'false'"
+
         self.step_2_interval = None
         self.step_1_interval = None
         self.Y = None
@@ -169,6 +211,19 @@ class Contour:
 
         self.initialize_dimension_one_values()
         self.initialize_dimension_two_values()
+
+        # Test, if dim_res fits to the formula result with the given input dimensions dim_1 and dim_2
+        d1 = Q_(1, self.dim_1)
+        d2 = Q_(1, self.dim_2)
+        res = calculate_z(self.formula, d1, d2)
+        try:
+            if res.dimensionality != self.unity_res.dimensionality:
+                raise UnitError(f"Dimension of calculation result {res.dimensionality} does not match the given result"
+                                f"dimension resolution {self.unity_res.dimensionality}")
+        except DimensionalityError as e:
+            raise UnitError(f"Dimension of calculation result {res.dimensionality} does not match the given result"
+                            f"dimension resolution {self.unity_res.dimensionality}") from e
+
         self.initialize_diagram_labels()
         self.set_values_for_contour_calc_with_scalars_scaled_to_base_units()
         self.filename_for_saved_contour_figure()
@@ -197,12 +252,14 @@ class Contour:
 
     def _set_correct_units_for_dimension(self, dimension, min_value, max_value, step_value):
         """
-        :param dimension: The dimension of the values being set. This should be a valid dimension recognized by the Quantity class.
+        :param dimension: The dimension of the values being set. This should be a valid dimension recognized by the
+        Quantity class.
         :param min_value: The minimum value allowed for the dimension.
         :param max_value: The maximum value allowed for the dimension.
         :param step_value: The step value by which the dimension values should be incremented.
 
-        :return: A tuple containing the minimum value, maximum value, and step value, all with the appropriate units based on the dimension provided.
+        :return: A tuple containing the minimum value, maximum value, and step value, all with the appropriate units
+        based on the dimension provided.
         """
         min_value_with_unit = Q_(min_value, dimension)
         max_value_with_unit = Q_(max_value, dimension)
@@ -423,8 +480,9 @@ class Contour:
 @click.argument('y_dim', type=str)
 @click.argument('swap_axes', type=str)
 @click.option('--verbose', '-v', default=False, help='print verbose information on screen')
-def c(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_min, y_max, y_step, y_dim, swap_axes,
-      verbose):
+def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_min, y_max, y_step, y_dim,
+          swap_axes,
+          verbose):
     """
 
     :param title: The title of the contour plot
@@ -459,4 +517,4 @@ def c(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y
 
 
 if __name__ == '__main__':
-    c()
+    cplot()
