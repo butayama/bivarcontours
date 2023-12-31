@@ -41,7 +41,8 @@ from numpy import sqrt
 import seaborn as sns
 import numpy as np
 from pint import UnitRegistry, UndefinedUnitError, DimensionalityError, Quantity, Unit
-from sympy import symbols, N
+from sympy import symbols, sympify
+from sympy.core import Float, sympify
 from sympy.parsing.sympy_parser import parse_expr
 import sympy.physics.units as sympy_units
 
@@ -57,33 +58,16 @@ SCALING_FACTOR = 10 ** SCALING_EXPONENT
 X, Y = symbols('X Y')
 
 
-def to_sympy(quantity: Quantity):
-    # divide and extract the magnitude from the units: it will generate a two elements tuple, where the first item
-    # will be the magnitude and the second ona a tuple of tuples; each nested tuple is composed by two elements,
-    # the unit proper and the exponent to which is elevated; the tuples are supposed to be multiplied together.
+def result_unit(parsed_formula, x_sym, y_sym, x_base, y_base):
+    # Calculate the formula with replaced dimensionless values
+    substituted_formula = parsed_formula.subs({x_sym: 1, y_sym: 1})  # replace with 1, as it won't affect units
 
-    # quantity is multiplied by 1 so that it is converted to pint.Quantity if pint.Unit is passed instead
-    magnitude, units = (1 * quantity).to_tuple()
-
-    # for each unit (i.e. tuple), check if it exists in the sympy.physics.units module
-    for ut in units:
-        fullname = ut[0]
-        shortname = f'{Unit(fullname):~}'
-        exponent = ut[1]
-
-        # add a new unit if it doesn't exist
-        if not hasattr(sympy_units, fullname):
-            setattr(sympy_units, fullname,
-                    sympy_units.Quantity(fullname, abbrev=shortname))  # create the new sympy unit with full name
-            setattr(sympy_units, shortname, getattr(sympy_units, fullname))  # create the alias with the shortname
-
-        # multiply magnitude for the sympy units (create a sympy.core.Mul object)
-        magnitude *= getattr(sympy_units, fullname) ** exponent
-
-    return magnitude
+    # Units will propagate appropriately as we're multiplying with original units
+    expected_result_unit = substituted_formula.evalf(subs={x_sym: x_base.units, y_sym: y_base.units})
+    return expected_result_unit
 
 
-def calculate_z(formula_, x, y):
+def calculate_z(formula_, x, y, z_dim):
     """
     using eval() in unsafe environments e.g. Webserver is evil.
     Using SymPy's parse_expr is generally safe when considering injecting malicious code, as parse_expr will only
@@ -108,29 +92,59 @@ def calculate_z(formula_, x, y):
     Always remember that when it comes to security, there's more to consider than just whether a single function is
     safe or not. A secure application/system requires an overall well-thought-out design.
 
-    :param formula_:
+    process a function with two variables x and y with sympy. Consider that the values x and y are pint derived
+    values with magnitude and units. In special cases the units could be dimensionless. Sympy internally could
+    handle base units. Pint has a larger pool of dimensions but could convert these arbitrary dimensions to base units.
+    It is important to consider the correct factors to adjust the magnitudes of the values according to the base unit
+    conversion. In a first step convert the values x and y to base units and pass them with a formula (e.g. "x/y" to
+    sympy to be processed. the result should be returned from sympy and converted back to pint derived values with
+    magnitude and units. The dimension result should be compared with the expected dimension result e.g: dimensionless
+    in the case of x/y or m² in the case of x*y (with m as base unit). If the comparison result passes, the result
+    will be processed further. Otherwise, an exception "invalidFormula" will be raised.
+
+    :param z_dim: unit fo the calculation result: string
+    :param formula_: f(x,y): string
     :param x:
     :param y:
     :return: z
     """
     # formula_ = f(x,y)
     try:
-        x_base = to_sympy(x.to_base_units())
+        x_base = x.to_base_units()
     except AttributeError as e:  # x has no attribute 'to_base_units'
-        x_base = Q_(x, "m")
-        x_base = to_sympy(x.to_base_units())
+        x_base = Q_(x, ureg.dimensionless)
+        x_base = x.to_base_units()
     try:
-        y_base = to_sympy(y.to_base_units())
+        y_base = y.to_base_units()
     except AttributeError as e:  # y has no attribute 'to_base_units'
-        y_base = Q_(y, "m")
-        y_base = to_sympy(y.to_base_units())
-    try:
-        substitutions = {X: x_base, Y: y_base}
-        z = N(parse_expr(formula_).subs(substitutions))
-    except ZeroDivisionError as e:
-        raise ZeroDivisionError("Division by zero: choose an other range for the x ond / or y variables", e)
+        y_base = Q_(y, ureg.dimensionless)
+        y_base = y.to_base_units()
 
-    return z
+    # Substitute the base units into the symbolic formula
+    x_sym, y_sym = symbols('x y')
+
+    parsed_formula = None
+    try:
+        parsed_formula = sympify(formula_)
+    except Exception as e:
+        raise ValueError("invalidFormula") from e
+
+    # Do the actual numerical calculation using magnitudes
+    result = parsed_formula.evalf(subs={x_sym: x_base.magnitude, y_sym: y_base.magnitude})
+
+    # Convert result back to pint Quantity with appropriate unit
+    expected_result_unit = result_unit(parsed_formula, x_sym, y_sym, x_base, y_base)
+
+    # Validate the units during computation.
+    # If expected_result_unit is a float but it's supposed to be dimensionless
+    # We can just set it to 'dimensionless' or an empty string
+    if isinstance(expected_result_unit, Float ):
+        expected_result_unit = ''  # or 'dimensionless'
+
+    result_quant = ureg.Quantity(result, expected_result_unit)
+    if result_quant.dimensionality != ureg.parse_expression(z_dim).dimensionality:
+        raise DimensionalityError("Invalid dimensionality")
+    return result_quant
 
 
 class UnitError(Exception):
@@ -294,7 +308,7 @@ class Contour:
         # Test, if dim_res fits to the formula result with the given input dimensions dim_1 and dim_2
         d1 = Q_(1, self.dim_1)
         d2 = Q_(1, self.dim_2)
-        res = calculate_z(self.formula, d1, d2)
+        res = calculate_z(self.formula, d1, d2, self.dim_res)
         try:
             if res.dimensionality != self.unity_res.dimensionality:
                 raise UnitError(f"Dimension of calculation result {res.dimensionality} does not match the given result"
@@ -378,8 +392,12 @@ class Contour:
 
         :return: None
         """
-        self.x_values = np.arange(self.start_1, self.stop_1, step=self.step_1_interval)
-        self.y_values = np.arange(self.start_2, self.stop_2, step=self.step_2_interval)
+
+        #  use Pint's Quantity object to wrap the numpy.ndarray
+        self.x_values = Q_(np.arange(self.start_1, self.stop_1, step=self.step_1_interval), self.base_unit_1)
+        self.y_values = Q_(np.arange(self.start_2, self.stop_2, step=self.step_2_interval), self.base_unit_2)
+
+
 
     def filename_for_saved_contour_figure(self):
         """
@@ -404,8 +422,8 @@ class Contour:
         # calculate corresponding Z values
         # calculate contour values
         # generate contour labels
-        self.vals = calculate_z(self.formula, self.X, self.Y)
-        self.hl = calculate_z(self.formula, self.X, self.Y)
+        self.vals = calculate_z(self.formula, self.X, self.Y, self.dim_res)
+        self.hl = calculate_z(self.formula, self.X, self.Y, self.dim_res)
 
     def check_ticks_in_range(self, ax):
         """
