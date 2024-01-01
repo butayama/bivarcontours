@@ -65,11 +65,11 @@ def result_unit(parsed_formula, x_sym, y_sym, x_base, y_base):
     substituted_formula = parsed_formula.subs({x_sym: 1, y_sym: 1})  # replace with 1, as it won't affect units
 
     # Units will propagate appropriately as we're multiplying with original units
-    expected_result_unit = substituted_formula.evalf(subs={x_sym: x_base.units, y_sym: y_base.units})
+    expected_result_unit = substituted_formula.evalf(subs={x_sym: x_base, y_sym: y_base})
     return expected_result_unit
 
 
-def runtime_calculate_z(formula_, x_, y_, z_dim):
+def runtime_calculate_z(formula_, x_, y_, x_base, y_base, z_dim):
     """
     Use evaluate(), NumExpr() from the numexpr library to compile the arithmetic expression at runtime.
     Using numexpr.evaluate() or any similar function with untrusted input (like user-supplied formulas) can have
@@ -98,21 +98,14 @@ def runtime_calculate_z(formula_, x_, y_, z_dim):
     Especially in crucial or sensitive applications, it's ideal to have a passlist of allowed operations and
     strictly parse the user input.
 
-    :param formula_:
-    :param x_:
-    :param y_:
-    :return:
+    :param formula_: f(x,y): string
+    :param x_: numpy x array
+    :param y_: numpy y array
+    :param x_base: base unit for x
+    :param y_base: base unit for y
+    :param z_dim: unit for the calculation result: string
+    :return: result_quant : numpy z array with ureg.Quantity
     """
-    try:
-        x_base = x_.to_base_units()
-    except AttributeError as e:  # x has no attribute 'to_base_units'
-        x_base = Q_(x_, ureg.dimensionless)
-        x_base = x_.to_base_units()
-    try:
-        y_base = y_.to_base_units()
-    except AttributeError as e:  # y has no attribute 'to_base_units'
-        y_base = Q_(y_, ureg.dimensionless)
-        y_base = y_.to_base_units()
 
     # Substitute the base units into the symbolic formula
     x_sym, y_sym = symbols('x y')
@@ -128,18 +121,16 @@ def runtime_calculate_z(formula_, x_, y_, z_dim):
     # Validate the units during computation.
     # If expected_result_unit is a float, but it's supposed to be dimensionless,
     # set it to 'dimensionless' or an empty string
-    if isinstance(expected_result_unit, Float ):
+    if isinstance(expected_result_unit, Float):
         expected_result_unit = ''  # or 'dimensionless'
 
-    # create numexpr object from formula
-    expr = ne.NumExpr(formula_)
+    x = x_
+    y = y_
 
     # evaluate expression on the magnitudes of x_base and y_base
+    # ToDo: check for 0 division
     try:
-        print(f"x_base.magnitude = {x_base.magnitude}")
-        print(f"y_base.magnitude = {y_base.magnitude}")
-        print("expr = {expr}")
-        result = expr.evaluate(local_dict={'x': x_base.magnitude, 'y': y_base.magnitude})
+        result = result = ne.evaluate(formula_)
     except Exception as e:
         print("An error occurred while computing the result: ", e)
         result = None
@@ -226,7 +217,7 @@ def calculate_z(formula_, x_, y_, z_dim):
     # Validate the units during computation.
     # If expected_result_unit is a float, but it's supposed to be dimensionless,
     # set it to 'dimensionless' or an empty string
-    if isinstance(expected_result_unit, Float ):
+    if isinstance(expected_result_unit, Float):
         expected_result_unit = ''  # or 'dimensionless'
 
     result_quant = ureg.Quantity(result, expected_result_unit)
@@ -257,6 +248,40 @@ def unit_validation(dims):
             test_quantity = Q_(1, dim)  # Creates a Quantity with magnitude 1 and the specified unit
         except UndefinedUnitError as e:
             raise UnitError(f"Dimension {dim} is not defined in the pint module") from e
+
+
+def _convert_units_to_dimensionless_and_get_interval(min_value, max_value, step_value):
+    """
+    Converts units to dimensionless and returns the start, base unit, stop, and interval.
+
+    :param min_value: The minimum value with units.
+    :param max_value: The maximum value with units.
+    :param step_value: The step value with units.
+    :return: A tuple containing the start (dimensionless), base unit (dimensionless),
+        stop (dimensionless), and interval (dimensionless).
+    """
+    start = min_value.to_base_units().magnitude
+    base_unit = min_value.to_base_units().units
+    stop = max_value.to_base_units().magnitude
+    interval = step_value.to_base_units().magnitude
+    return start, base_unit, stop, interval
+
+
+def _set_correct_units_for_dimension(dimension, min_value, max_value, step_value):
+    """
+    :param dimension: The dimension of the values being set. This should be a valid dimension recognized by the
+    Quantity class.
+    :param min_value: The minimum value allowed for the dimension.
+    :param max_value: The maximum value allowed for the dimension.
+    :param step_value: The step value by which the dimension values should be incremented.
+
+    :return: A tuple containing the minimum value, maximum value, and step value, all with the appropriate units
+    based on the dimension provided.
+    """
+    min_value_with_unit = Q_(min_value, dimension)
+    max_value_with_unit = Q_(max_value, dimension)
+    step_value_with_unit = Q_(step_value, dimension)
+    return min_value_with_unit, max_value_with_unit, step_value_with_unit
 
 
 class Contour:
@@ -331,8 +356,12 @@ class Contour:
         self.filename = None
         self.label_y = None
         self.label_x = None
-        self.y_values = None
         self.x_values = None
+        self.np_X = None
+        self.x_np_values = None
+        self.y_values = None
+        self.np_Y = None
+        self.y_np_values = None
         self.arr_step_2 = None
         self.stop_2 = None
         self.base_unit_2 = None
@@ -416,9 +445,9 @@ class Contour:
         :return: None
         """
         min_1_with_unit, max_1_with_unit, step_1_with_unit = (
-            self._set_correct_units_for_dimension(self.dim_1, self.min_1, self.max_1, self.step_1))
+            _set_correct_units_for_dimension(self.dim_1, self.min_1, self.max_1, self.step_1))
         self.start_1, self.base_unit_1, self.stop_1, self.step_1_interval = (
-            self._convert_units_to_dimensionless_and_get_interval(min_1_with_unit, max_1_with_unit, step_1_with_unit))
+            _convert_units_to_dimensionless_and_get_interval(min_1_with_unit, max_1_with_unit, step_1_with_unit))
 
     def initialize_dimension_two_values(self):
         """
@@ -427,41 +456,9 @@ class Contour:
         :return: None
         """
         min_2_with_unit, max_2_with_unit, step_2_with_unit = (
-            self._set_correct_units_for_dimension(self.dim_2, self.min_2, self.max_2, self.step_2))
+            _set_correct_units_for_dimension(self.dim_2, self.min_2, self.max_2, self.step_2))
         self.start_2, self.base_unit_2, self.stop_2, self.step_2_interval = (
-            self._convert_units_to_dimensionless_and_get_interval(min_2_with_unit, max_2_with_unit, step_2_with_unit))
-
-    def _set_correct_units_for_dimension(self, dimension, min_value, max_value, step_value):
-        """
-        :param dimension: The dimension of the values being set. This should be a valid dimension recognized by the
-        Quantity class.
-        :param min_value: The minimum value allowed for the dimension.
-        :param max_value: The maximum value allowed for the dimension.
-        :param step_value: The step value by which the dimension values should be incremented.
-
-        :return: A tuple containing the minimum value, maximum value, and step value, all with the appropriate units
-        based on the dimension provided.
-        """
-        min_value_with_unit = Q_(min_value, dimension)
-        max_value_with_unit = Q_(max_value, dimension)
-        step_value_with_unit = Q_(step_value, dimension)
-        return min_value_with_unit, max_value_with_unit, step_value_with_unit
-
-    def _convert_units_to_dimensionless_and_get_interval(self, min_value, max_value, step_value):
-        """
-        Converts units to dimensionless and returns the start, base unit, stop, and interval.
-
-        :param min_value: The minimum value with units.
-        :param max_value: The maximum value with units.
-        :param step_value: The step value with units.
-        :return: A tuple containing the start (dimensionless), base unit (dimensionless),
-            stop (dimensionless), and interval (dimensionless).
-        """
-        start = min_value.to_base_units().magnitude
-        base_unit = min_value.to_base_units().units
-        stop = max_value.to_base_units().magnitude
-        interval = step_value.to_base_units().magnitude
-        return start, base_unit, stop, interval
+            _convert_units_to_dimensionless_and_get_interval(min_2_with_unit, max_2_with_unit, step_2_with_unit))
 
     def initialize_diagram_labels(self):
         """
@@ -480,12 +477,13 @@ class Contour:
 
         :return: None
         """
+        # Generate numpy arrays
+        self.x_np_values = np.arange(self.start_1, self.stop_1, step=self.step_1_interval)
+        self.y_np_values = np.arange(self.start_2, self.stop_2, step=self.step_2_interval)
 
         #  use Pint's Quantity object to wrap the numpy.ndarray
-        self.x_values = Q_(np.arange(self.start_1, self.stop_1, step=self.step_1_interval), self.base_unit_1)
-        self.y_values = Q_(np.arange(self.start_2, self.stop_2, step=self.step_2_interval), self.base_unit_2)
-
-
+        self.x_values = Q_(self.x_np_values, self.base_unit_1)
+        self.y_values = Q_(self.y_np_values, self.base_unit_2)
 
     def filename_for_saved_contour_figure(self):
         """
@@ -506,16 +504,23 @@ class Contour:
         """
         # x and y axes values meshgrid
         self.X, self.Y = np.meshgrid(self.x_values, self.y_values)
+        # x and y axes values meshgrid for runtime_calculate_z
+        self.np_X, self.np_Y = np.meshgrid(self.x_np_values, self.y_np_values)
 
         # calculate corresponding Z values
         # calculate contour values
+        self.vals = runtime_calculate_z(self.formula, self.np_X, self.np_Y,
+                                        self.base_unit_1, self.base_unit_2, self.dim_res)
+
         # generate contour labels
-        self.vals = runtime_calculate_z(self.formula, self.X, self.Y, self.dim_res)
-        self.hl = runtime_calculate_z(self.formula, self.X, self.Y, self.dim_res)
+        self.hl = runtime_calculate_z(self.formula, self.np_X, self.np_Y,
+                                      self.base_unit_1, self.base_unit_2, self.dim_res)
 
     def check_ticks_in_range(self, ax, tick_x_values, tick_y_values):
         """
         :param ax: A matplotlib Axes object representing the plot on which to check the tick values.
+        :param tick_y_values:
+        :param tick_x_values:
         :return: None
 
         Checks if the tick values on the x-axis and y-axis of the given Axes object are within the data range of the
@@ -547,7 +552,7 @@ class Contour:
 
         :return: None
         """
-        # create matplotlib figure (size in inches)
+        # create a matplotlib figure (size in inches)
         fig_01 = plt.figure(figsize=(FIGURE_SIZE, FIGURE_SIZE))
         fig_01.suptitle(f'{self.title}', fontsize=TITLE_FONTSIZE, fontweight=TITLE_FONTWEIGHT)
         dia = fig_01.add_subplot(111)
@@ -592,7 +597,7 @@ class Contour:
         dia.set_xlim(min(x_dim_values), max(x_dim_values))
         dia.set_ylim(min(x_dim_values), max(x_dim_values))
 
-        # generate y-ticks for Capacitor contour
+        # generate y-ticks for formula contour
         xticks = dia.get_xticks()
         yticks = dia.get_yticks()
         # formatting numpy array xticks and yticks with Pint
@@ -607,7 +612,7 @@ class Contour:
             print('xticklabels = ', [f'{tick.to(self.dim_1):~P.2f}' for tick in xticks_with_unit])
             print('yticklabels = ', [f'{tick.to(self.dim_2):~P.2f}' for tick in yticks_with_unit])
 
-        self.check_ticks_in_range(dia,x_dim_values, x_dim_values)
+        self.check_ticks_in_range(dia, x_dim_values, y_dim_values)
 
         # Set labels and title
         # self.min_1 = Q_(min_1, dim_1)

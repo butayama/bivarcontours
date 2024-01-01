@@ -19,9 +19,9 @@ def test_bivarcontours():
 
 
 def test_calculate_z():
-    assert calculate_z('x + y', 5, 7) == 12
+    assert calculate_z('x + y', 5, 7, '') == 12
     with pytest.raises(ZeroDivisionError):
-        calculate_z('x / y', 5, 0)
+        calculate_z('x / y', 5, 0, '')
 
 
 def test_unit_validation():
