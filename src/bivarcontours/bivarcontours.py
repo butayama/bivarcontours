@@ -37,12 +37,14 @@ incorrect data types are passed.
 import click
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter, NullFormatter
-from numpy import sqrt
+import numexpr as ne
 import seaborn as sns
 import numpy as np
 from pint import UnitRegistry, UndefinedUnitError, DimensionalityError, Quantity, Unit
-from sympy import symbols, sympify
+from sympy import symbols, Matrix
 from sympy.core import Float, sympify
+from sympy.tensor.array import ImmutableDenseNDimArray
+from sympy.abc import x, y
 from sympy.parsing.sympy_parser import parse_expr
 import sympy.physics.units as sympy_units
 
@@ -67,9 +69,93 @@ def result_unit(parsed_formula, x_sym, y_sym, x_base, y_base):
     return expected_result_unit
 
 
-def calculate_z(formula_, x, y, z_dim):
+def runtime_calculate_z(formula_, x_, y_, z_dim):
     """
-    using eval() in unsafe environments e.g. Webserver is evil.
+    Use evaluate(), NumExpr() from the numexpr library to compile the arithmetic expression at runtime.
+    Using numexpr.evaluate() or any similar function with untrusted input (like user-supplied formulas) can have
+    security implications.
+    Like eval(), numexpr.evaluate() parses the input and evaluates it.
+    This parsing and evaluation is done with C and not Python, which might limit the possible malicious code that
+    could be run, but it doesn't guarantee that no harm can be done.
+    While it's less likely than with Python's eval(), it is theoretically possible for a user to craft an input string
+    that causes numexpr.evaluate() to execute arbitrary code or perform operations that consume excessive resources.
+    For example, a user could potentially input a formula that results in an infinite loop or a formula that attempts
+    to allocate massive amounts of memory, effectively conducting a Denial-of-Service (DoS) attack on your machine
+    or program.
+    Therefore, as a general rule, never trust user input.
+    Always sanitize/validate any input before using it.
+    If you must use formulas from an unknown source, it might be safer to parse the formula yourself and validate
+    that it contains only allowed symbols (variables and safe functions) in a valid structure.
+    You want to ensure that the formula doesn't contain any unrecognized or potentially harmful elements.
+    If you plan to accept user input of arbitrary formulas, you should make sure to validate the input carefully
+    to make sure it doesn't contain any unexpected or harmful content.
+    This can include:
+    - Checking the formula against a list of safe-to-use functions and/or symbols.
+    - Putting limits on formula size, complexity, and computational cost.
+    - Using try/except blocks to catch and handle any resulting exceptions.
+    - Putting a timeout limit on calculations to prevent your service from hanging on extremely complex inputs.
+    In any case, without further protections, it's better to not allow untrusted users to supply arbitrary formulas.
+    Especially in crucial or sensitive applications, it's ideal to have a passlist of allowed operations and
+    strictly parse the user input.
+
+    :param formula_:
+    :param x_:
+    :param y_:
+    :return:
+    """
+    try:
+        x_base = x_.to_base_units()
+    except AttributeError as e:  # x has no attribute 'to_base_units'
+        x_base = Q_(x_, ureg.dimensionless)
+        x_base = x_.to_base_units()
+    try:
+        y_base = y_.to_base_units()
+    except AttributeError as e:  # y has no attribute 'to_base_units'
+        y_base = Q_(y_, ureg.dimensionless)
+        y_base = y_.to_base_units()
+
+    # Substitute the base units into the symbolic formula
+    x_sym, y_sym = symbols('x y')
+
+    # Convert the result back to pint Quantity with the appropriate unit
+    parsed_formula = None
+    try:
+        parsed_formula = sympify(formula_)
+    except Exception as e:
+        raise ValueError("invalidFormula") from e
+    expected_result_unit = result_unit(parsed_formula, x_sym, y_sym, x_base, y_base)
+
+    # Validate the units during computation.
+    # If expected_result_unit is a float, but it's supposed to be dimensionless,
+    # set it to 'dimensionless' or an empty string
+    if isinstance(expected_result_unit, Float ):
+        expected_result_unit = ''  # or 'dimensionless'
+
+    # create numexpr object from formula
+    expr = ne.NumExpr(formula_)
+
+    # evaluate expression on the magnitudes of x_base and y_base
+    try:
+        print(f"x_base.magnitude = {x_base.magnitude}")
+        print(f"y_base.magnitude = {y_base.magnitude}")
+        print("expr = {expr}")
+        result = expr.evaluate(local_dict={'x': x_base.magnitude, 'y': y_base.magnitude})
+    except Exception as e:
+        print("An error occurred while computing the result: ", e)
+        result = None
+
+        # Convert the result back to pint Quantity with the appropriate unit
+    result_quant = ureg.Quantity(result, expected_result_unit)
+
+    if result_quant.dimensionality != ureg.parse_expression(z_dim).dimensionality:
+        raise DimensionalityError("Invalid dimensionality")
+
+    return result_quant
+
+
+def calculate_z(formula_, x_, y_, z_dim):
+    """
+    using eval() in unsafe environments, e.g. Webserver is evil.
     Using SymPy's parse_expr is generally safe when considering injecting malicious code, as parse_expr will only
     interpret mathematical expressions and not arbitrary Python code. This makes it inherently safer than functions
     like eval() which can execute arbitrary Python code.
@@ -92,37 +178,38 @@ def calculate_z(formula_, x, y, z_dim):
     Always remember that when it comes to security, there's more to consider than just whether a single function is
     safe or not. A secure application/system requires an overall well-thought-out design.
 
-    process a function with two variables x and y with sympy. Consider that the values x and y are pint derived
-    values with magnitude and units. In special cases the units could be dimensionless. Sympy internally could
+    process a function with two variables x and y with sympy. Consider that the values x and y are pint-derived
+    values with magnitude and units. In special cases, the units could be dimensionless. Sympy internally could
     handle base units. Pint has a larger pool of dimensions but could convert these arbitrary dimensions to base units.
     It is important to consider the correct factors to adjust the magnitudes of the values according to the base unit
-    conversion. In a first step convert the values x and y to base units and pass them with a formula (e.g. "x/y" to
-    sympy to be processed. the result should be returned from sympy and converted back to pint derived values with
-    magnitude and units. The dimension result should be compared with the expected dimension result e.g: dimensionless
+    conversion. In a first step, convert the values x and y to base units and pass them with a formula (e.g. "x/y") to
+    sympy to be processed. the result should be returned from sympy and converted back to pint-derived values with
+    magnitude and units. The dimension result should be compared with the expected dimension result e.g.: dimensionless
     in the case of x/y or m² in the case of x*y (with m as base unit). If the comparison result passes, the result
     will be processed further. Otherwise, an exception "invalidFormula" will be raised.
 
     :param z_dim: unit fo the calculation result: string
     :param formula_: f(x,y): string
-    :param x:
-    :param y:
+    :param x_:
+    :param y_:
     :return: z
     """
-    # formula_ = f(x,y)
+
     try:
-        x_base = x.to_base_units()
+        x_base = x_.to_base_units()
     except AttributeError as e:  # x has no attribute 'to_base_units'
-        x_base = Q_(x, ureg.dimensionless)
-        x_base = x.to_base_units()
+        x_base = Q_(x_, ureg.dimensionless)
+        x_base = x_.to_base_units()
     try:
-        y_base = y.to_base_units()
+        y_base = y_.to_base_units()
     except AttributeError as e:  # y has no attribute 'to_base_units'
-        y_base = Q_(y, ureg.dimensionless)
-        y_base = y.to_base_units()
+        y_base = Q_(y_, ureg.dimensionless)
+        y_base = y_.to_base_units()
 
     # Substitute the base units into the symbolic formula
     x_sym, y_sym = symbols('x y')
-
+    nd_array = ImmutableDenseNDimArray([[x_sym, y_sym]])
+    matrix_form = Matrix(nd_array.tolist())
     parsed_formula = None
     try:
         parsed_formula = sympify(formula_)
@@ -130,14 +217,15 @@ def calculate_z(formula_, x, y, z_dim):
         raise ValueError("invalidFormula") from e
 
     # Do the actual numerical calculation using magnitudes
-    result = parsed_formula.evalf(subs={x_sym: x_base.magnitude, y_sym: y_base.magnitude})
+    # result = parsed_formula.evalf(subs={x_sym: x_base.magnitude, y_sym: y_base.magnitude})
+    result = matrix_form.evalf()
 
-    # Convert result back to pint Quantity with appropriate unit
+    # Convert the result back to pint Quantity with the appropriate unit
     expected_result_unit = result_unit(parsed_formula, x_sym, y_sym, x_base, y_base)
 
     # Validate the units during computation.
-    # If expected_result_unit is a float but it's supposed to be dimensionless
-    # We can just set it to 'dimensionless' or an empty string
+    # If expected_result_unit is a float, but it's supposed to be dimensionless,
+    # set it to 'dimensionless' or an empty string
     if isinstance(expected_result_unit, Float ):
         expected_result_unit = ''  # or 'dimensionless'
 
@@ -422,16 +510,16 @@ class Contour:
         # calculate corresponding Z values
         # calculate contour values
         # generate contour labels
-        self.vals = calculate_z(self.formula, self.X, self.Y, self.dim_res)
-        self.hl = calculate_z(self.formula, self.X, self.Y, self.dim_res)
+        self.vals = runtime_calculate_z(self.formula, self.X, self.Y, self.dim_res)
+        self.hl = runtime_calculate_z(self.formula, self.X, self.Y, self.dim_res)
 
-    def check_ticks_in_range(self, ax):
+    def check_ticks_in_range(self, ax, tick_x_values, tick_y_values):
         """
         :param ax: A matplotlib Axes object representing the plot on which to check the tick values.
         :return: None
 
         Checks if the tick values on the x-axis and y-axis of the given Axes object are within the data range of the
-        plot. If any tick value is outside of the data range, a ValueError is raised.
+        plot. If any tick value is outside the data range, a ValueError is raised.
 
         Example usage:
             fig, ax = plt.subplots()
@@ -442,11 +530,11 @@ class Contour:
         x_range = ax.get_xlim()
         y_range = ax.get_ylim()
 
-        x_ticks_in_range = all(x_range[0] <= tick <= x_range[1] for tick in self.x_values)
-        y_ticks_in_range = all(y_range[0] <= tick <= y_range[1] for tick in self.y_values)
+        x_ticks_in_range = all(x_range[0] <= tick <= x_range[1] for tick in tick_x_values)
+        y_ticks_in_range = all(y_range[0] <= tick <= y_range[1] for tick in tick_y_values)
         if self.verbose:
-            print('x_ticks = ', [f'{tick:2f}' for tick in self.x_values])
-            print('y_ticks = ', [f'{tick:2f}' for tick in self.y_values])
+            print('x_ticks = ', [f'{tick:2f}' for tick in tick_x_values])
+            print('y_ticks = ', [f'{tick:2f}' for tick in tick_y_values])
 
         if not x_ticks_in_range:
             raise ValueError(f"x-tick values are outside of data range! {x_range[0]}-{x_range[1]}")
@@ -496,11 +584,13 @@ class Contour:
         # assign x- yticks to x- y_values
         # use set_xticks or FixedLocator before set_x / xticklabels
         # use set_yticks or FixedLocator before set_y / yticklabels
-        dia.set_xticks(self.x_values)
-        dia.set_yticks(self.y_values)
+        x_dim_values = self.x_values.magnitude
+        dia.set_xticks(x_dim_values)
+        y_dim_values = self.y_values.magnitude
+        dia.set_yticks(y_dim_values)
 
-        dia.set_xlim(min(self.x_values), max(self.x_values))
-        dia.set_ylim(min(self.y_values), max(self.y_values))
+        dia.set_xlim(min(x_dim_values), max(x_dim_values))
+        dia.set_ylim(min(x_dim_values), max(x_dim_values))
 
         # generate y-ticks for Capacitor contour
         xticks = dia.get_xticks()
@@ -517,7 +607,7 @@ class Contour:
             print('xticklabels = ', [f'{tick.to(self.dim_1):~P.2f}' for tick in xticks_with_unit])
             print('yticklabels = ', [f'{tick.to(self.dim_2):~P.2f}' for tick in yticks_with_unit])
 
-        self.check_ticks_in_range(dia)
+        self.check_ticks_in_range(dia,x_dim_values, x_dim_values)
 
         # Set labels and title
         # self.min_1 = Q_(min_1, dim_1)
