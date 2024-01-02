@@ -307,8 +307,7 @@ class Contour:
     - verbose (bool): Indicates whether to include verbose output during computation
 
     Methods:
-    - __init__(self, title, label_1, label_2, formula, dim_res, min_1, max_1, step_1, dim_1, min_2, max_2, step_2, dim_2, swap_axes, verbose=False): Initializes a Contour object with the
-    * given parameters.
+    - __init__(self, title, label_1, label_2, formula, dim_res, min_1, max_1, step_1, dim_1, min_2, max_2, step_2, dim_2, swap_axes, verbose=False): Initializes a Contour object with the given parameters.
     - initialize_swapping_axes(self, dim_1, dim_2): Initializes the values for swapping the axes if necessary.
     - initialize_values(self): Initializes all necessary values for generating the contour plot.
     - initialize_dimension_one_values(self): Initializes the values for the first dimension.
@@ -319,7 +318,7 @@ class Contour:
     - set_values_for_contour_calc_with_scalars_scaled_to_base_units(self): Sets the values for calculating the contour with scaled base units.
     - filename_for_saved_contour_figure(self): Generates the filename for saving the contour figure.
     - compute_values(self): Computes the contour values based on the given formula and dimension values.
-    - check_ticks_in_range(self, ax): Checks if the ticks are within the range of the contour plot.
+    - Check_ticks_in_range(self, ax): Checks if the ticks are within the range of the contour plot.
 
     """
 
@@ -345,7 +344,7 @@ class Contour:
         assert min_2 < max_2, "min_2 should be less than max_2"
         assert step_1 > 0, "step_1 should be a positive number"
         assert step_2 > 0, "step_2 should be a positive number"
-        assert swap_axes.lower() in ["true", "false"], "swap_axes should be either 'true' or 'false'"
+        assert swap_axes.lower() in ["true", "false", "True", "False"], "swap_axes should be either 'true' or 'false'"
 
         self.step_2_interval = None
         self.step_1_interval = None
@@ -382,10 +381,17 @@ class Contour:
         """
         This method initializes the swapping of axes.
 
+        :param label_1:
+        :param label_2:
+        :param min_1:
+        :param max_1:
+        :param step_1:
         :param dim_1: The first dimension to be swapped.
+        :param min_2:
+        :param max_2:
+        :param step_2:
         :param dim_2: The second dimension to be swapped.
         :return: None
-
         """
 
         if self.are_axes_swapped:
@@ -492,9 +498,9 @@ class Contour:
         :return: The generated filename for saving the contour figure.
         :rtype: str
         """
-        self.filename = (f'F_{self.title}_{self.dim_res}_X_{self.dim_1}_{self.x_values[0]:.2f}-'
-                         f'{self.x_values[-1]:.2f}_Y_{self.dim_2}_'
-                         f'{(self.y_values[0]):.2f}-{(self.y_values[-1]):.2f}.png')
+        dim_res = self.dim_res.replace("", "dimensionless")
+
+        self.filename = (f'F_{self.title}_{dim_res}_X_{self.dim_1}_{self.x_values[0].magnitude:.2f}-{self.x_values[-1].magnitude:.2f}_Y_{self.dim_2}_{(self.y_values[0].magnitude):.2f}-{(self.y_values[-1].magnitude):.2f}.png')
 
     def compute_values(self):
         """
@@ -535,6 +541,12 @@ class Contour:
         x_range = ax.get_xlim()
         y_range = ax.get_ylim()
 
+        # ToDo: See what happens if x_range[0] >= tick >= x_range[1]
+        """        
+        in matplotlib.axex.base.py 3564: 
+        The x-axis may be inverted, in which case the *left* value will
+        be greater than the *right* value. 
+        """
         x_ticks_in_range = all(x_range[0] <= tick <= x_range[1] for tick in tick_x_values)
         y_ticks_in_range = all(y_range[0] <= tick <= y_range[1] for tick in tick_y_values)
         if self.verbose:
@@ -547,95 +559,62 @@ class Contour:
             raise ValueError(f"y-tick values are outside of data range! {y_range[0]}-{y_range[1]}")
 
     def create_diagram(self):
-        """
-        Creates a diagram using matplotlib and saves it as an image file.
 
-        :return: None
-        """
-        # create a matplotlib figure (size in inches)
+        fig_01, dia = self.create_figure_with_grid()
+        self.set_axis_format(dia)
+        self.set_axis_ticks_and_limits(dia)
+        self.display_tick_labels(dia)
+        self.set_labels_and_title(dia)
+        self.generate_contour_plot(dia)
+        self.plot_and_store_fig(fig_01)
+
+    def create_figure_with_grid(self):
         fig_01 = plt.figure(figsize=(FIGURE_SIZE, FIGURE_SIZE))
         fig_01.suptitle(f'{self.title}', fontsize=TITLE_FONTSIZE, fontweight=TITLE_FONTWEIGHT)
         dia = fig_01.add_subplot(111)
-        dia.grid(True)  # show grid lines
-        # create diagram as subplot of fig_01
-        # click.group() = c: xticks: self.y_values = frequency [Hz], yticks: self.x_values = R1 [Ω]
+        dia.grid(True)
+        return fig_01, dia
 
-        """
-        The tick labels on the x and y axes might not be appearing due to several reasons. Here're few suggestions 
-        you can try: 
-
-        Ensure that the values used for setting ticks (self.x_values and self.y_values) are within the 
-        range of the axes. 
-
-        Make sure the formatting of tick labels in the create_diagram function is correct for your 
-        use case - especially the dynamic formatting based on the self.diagram_type. If the conditions in this 
-        statement are not met, your code would not execute the set_yticklabels and this might be the reason tick 
-        labels are not showing. 
-
-        Try calling plt.show() at the end of your create_diagram function, just after 
-        fig_01.savefig(self.filename, transparent=False). This will ensure the figure is displayed after all the 
-        drawing commands. 
-
-        The use of dia = fig_01.add_subplot(111, xticks=self.y_values, yticks=self.x_values, 
-        xscale='log') might be causing problems. Instead, you could create your subplot using the default values and 
-        change xticks and yticks later with dia.set_xticks(self.y_values) and dia.set_yticks(self.x_values)."""
-        # dia = fig_01.add_subplot(111, xticks=self.y_values, yticks=self.x_values, xscale='log')
-
-        # format the x-ticks and y-ticks of diagram
+    def set_axis_format(self, dia):
         for axis in [dia.xaxis]:
-            axis.set_major_formatter(ScalarFormatter())  # display major tick values as regular decimal numbers
-            axis.set_minor_formatter(NullFormatter())  # no labels at the minor ticks of the axis
+            axis.set_major_formatter(ScalarFormatter())
+            axis.set_minor_formatter(NullFormatter())
 
-        # assign x- yticks to x- y_values
-        # use set_xticks or FixedLocator before set_x / xticklabels
-        # use set_yticks or FixedLocator before set_y / yticklabels
+    def set_axis_ticks_and_limits(self, dia):
         x_dim_values = self.x_values.magnitude
-        dia.set_xticks(x_dim_values)
         y_dim_values = self.y_values.magnitude
+        dia.set_xticks(x_dim_values)
         dia.set_yticks(y_dim_values)
-
         dia.set_xlim(min(x_dim_values), max(x_dim_values))
-        dia.set_ylim(min(x_dim_values), max(x_dim_values))
+        dia.set_ylim(min(y_dim_values), max(y_dim_values))
 
-        # generate y-ticks for formula contour
-        xticks = dia.get_xticks()
-        yticks = dia.get_yticks()
-        # formatting numpy array xticks and yticks with Pint
-        xticks_with_unit = xticks * self.base_unit_1
-        yticks_with_unit = yticks * self.base_unit_2
-
-        # generate x - yticklabels
+    def display_tick_labels(self, dia):
+        xticks_with_unit = (dia.get_xticks() * self.base_unit_1)
+        yticks_with_unit = (dia.get_yticks() * self.base_unit_2)
         dia.set_xticklabels([f'{tick.to(self.dim_1).magnitude:.2f}' for tick in xticks_with_unit])
         dia.set_yticklabels([f'{tick.to(self.dim_2).magnitude:.2f}' for tick in yticks_with_unit])
+        self.check_ticks_in_range(dia, self.x_values.magnitude, self.y_values.magnitude)
 
         if self.verbose:
             print('xticklabels = ', [f'{tick.to(self.dim_1):~P.2f}' for tick in xticks_with_unit])
             print('yticklabels = ', [f'{tick.to(self.dim_2):~P.2f}' for tick in yticks_with_unit])
 
-        self.check_ticks_in_range(dia, x_dim_values, y_dim_values)
-
-        # Set labels and title
-        # self.min_1 = Q_(min_1, dim_1)
+    def set_labels_and_title(self, dia):
         dia.set_title(f"{self.formula} [{self.unity_res.units:~P}]", fontsize=14, fontweight='bold')
         dia.set_xlabel(self.label_x, fontsize=14, fontweight='bold')
         dia.set_ylabel(self.label_y, fontsize=14, fontweight='bold')
         plt.xticks(rotation=70)
         plt.yticks()
 
-        # generate contour plot
+    def generate_contour_plot(self, dia):
         img = dia.contourf(self.X, self.Y, self.vals, 35, zorder=0, cmap='Spectral')
-
-        # scale the clabel values to self.dim_res
         hl_with_unit = self.vals * self.unity_res
         scaled_hl_with_unit = hl_with_unit.to(self.dim_res)
         hl_scale_factor = hl_with_unit[0, 0].magnitude / scaled_hl_with_unit[0, 0].magnitude
-        # plot scaled clabel values
         self.hl = dia.contour(self.X, self.Y, self.vals / hl_scale_factor, 35, zorder=0, colors='black')
         plt.clabel(self.hl, inline=1, fontsize=12, fmt=lambda x: f"{x:.2f}")
 
-        print(f"diagram_name: {self.filename}")
-
-        # plot and store fig_01
+    def plot_and_store_fig(self, fig_01):
         plt.show()
         fig_01.savefig(self.filename, transparent=False)
 
@@ -651,6 +630,7 @@ class Contour:
         self.initialize_diagram_labels()
         self.set_values_for_contour_calc_with_scalars_scaled_to_base_units()
         self.filename_for_saved_contour_figure()
+        print(f"diagram_name: {self.filename}")
         self.compute_values()
         self.create_diagram()
         # plt.show()
@@ -666,13 +646,13 @@ class Contour:
 @click.argument('x_stop', type=float)
 @click.argument('x_step', type=float)
 @click.argument('x_dim', type=str)
-@click.argument('y_min', type=float)
-@click.argument('y_max', type=float)
+@click.argument('y_start', type=float)
+@click.argument('y_stop', type=float)
 @click.argument('y_step', type=float)
 @click.argument('y_dim', type=str)
 @click.argument('swap_axes', type=str)
 @click.option('--verbose', '-v', default=False, help='print verbose information on screen')
-def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_min, y_max, y_step, y_dim,
+def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_start, y_stop, y_step, y_dim,
           swap_axes,
           verbose):
     """
@@ -686,8 +666,8 @@ def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_di
     :param x_stop: The stopping value of the x-axis
     :param x_step: The step size of the x-axis
     :param x_dim: The dimension of the x-axis values
-    :param y_min: The minimum value of the y-axis
-    :param y_max: The maximum value of the y-axis
+    :param y_start: The starting value of the y-axis
+    :param y_stop: The stopping value of the y-axis
     :param y_step: The step size of the y-axis
     :param y_dim: The dimension of the y-axis values
     :param swap_axes: The flag indicating whether to swap the x and y axes
@@ -697,14 +677,14 @@ def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_di
     """
     click.echo(
         f"Running --cplot with title {title}, x_label {x_label}, y_label {y_label}, formula {formula}, x_start {x_start}, "
-        f"x_stop {x_stop}, x_step {x_step}, x_dim {x_dim}, y_min {y_min}, y_max {y_max}, y_step {y_step}, "
+        f"x_stop {x_stop}, x_step {x_step}, x_dim {x_dim}, y_start {y_start}, y_stop {y_stop}, y_step {y_step}, "
         f"y_dim {y_dim}, swap_axes {swap_axes}, verbose {verbose}")
     label_x_dimension = Q_(1, x_dim).units
     label_y_dimension = Q_(1, y_dim).units
     x_label = f"{x_label} [{label_x_dimension:~P}]"
     y_label = f"{y_label} [{label_y_dimension:~P}]"
-    c_c = Contour(title, x_label, y_label, formula, z_dim, y_min, y_max, y_step, y_dim, x_start, x_stop, x_step, x_dim,
-                  swap_axes, verbose)
+    c_c = Contour(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_start, y_stop, y_step,
+                  y_dim, swap_axes, verbose)
     c_c.run()
 
 
