@@ -40,13 +40,14 @@ from matplotlib.ticker import ScalarFormatter, NullFormatter
 import numexpr as ne
 import seaborn as sns
 import numpy as np
-from pint import UnitRegistry, UndefinedUnitError, DimensionalityError, Quantity, Unit
+from pint import UnitRegistry, UndefinedUnitError, DimensionalityError, UnitStrippedWarning
 from sympy import symbols, Matrix
 from sympy.core import Float, sympify
 from sympy.tensor.array import ImmutableDenseNDimArray
 from sympy.abc import x, y
 from sympy.parsing.sympy_parser import parse_expr
 import sympy.physics.units as sympy_units
+import warnings
 
 ureg = UnitRegistry()
 Q_ = ureg.Quantity
@@ -122,7 +123,8 @@ def runtime_calculate_z(formula_, x_, y_, x_base, y_base, z_dim):
     # If expected_result_unit is a float, but it's supposed to be dimensionless,
     # set it to 'dimensionless' or an empty string
     if isinstance(expected_result_unit, Float):
-        expected_result_unit = ''  # or 'dimensionless'
+        # ToDo Why Float instead of Hz ??
+        expected_result_unit = 'Hz'  # or 'dimensionless'
 
     x = x_
     y = y_
@@ -137,9 +139,10 @@ def runtime_calculate_z(formula_, x_, y_, x_base, y_base, z_dim):
 
         # Convert the result back to pint Quantity with the appropriate unit
     result_quant = ureg.Quantity(result, expected_result_unit)
-
-    if result_quant.dimensionality != ureg.parse_expression(z_dim).dimensionality:
-        raise DimensionalityError("Invalid dimensionality")
+    actual_dim = result_quant.dimensionality
+    expected_dim = ureg.parse_expression(z_dim).dimensionality
+    if actual_dim != expected_dim:
+        raise DimensionalityError(actual_dim, expected_dim)
 
     return result_quant
 
@@ -218,11 +221,12 @@ def calculate_z(formula_, x_, y_, z_dim):
     # If expected_result_unit is a float, but it's supposed to be dimensionless,
     # set it to 'dimensionless' or an empty string
     if isinstance(expected_result_unit, Float):
-        expected_result_unit = ''  # or 'dimensionless'
+        # ToDo Why Float instead of Hz ??
+        expected_result_unit = 'Hz'  # or 'dimensionless'
 
     result_quant = ureg.Quantity(result, expected_result_unit)
     if result_quant.dimensionality != ureg.parse_expression(z_dim).dimensionality:
-        raise DimensionalityError("Invalid dimensionality")
+        raise DimensionalityError(result_quant.dimensionality, ureg.parse_expression(z_dim).dimensionality)
     return result_quant
 
 
@@ -607,11 +611,11 @@ class Contour:
         plt.yticks()
 
     def generate_contour_plot(self, dia):
-        img = dia.contourf(self.X, self.Y, self.vals, 35, zorder=0, cmap='Spectral')
+        img = dia.contourf(self.X.magnitude, self.Y.magnitude, self.vals.magnitude, 35, zorder=0, cmap='Spectral')
         hl_with_unit = self.vals * self.unity_res
         scaled_hl_with_unit = hl_with_unit.to(self.dim_res)
         hl_scale_factor = hl_with_unit[0, 0].magnitude / scaled_hl_with_unit[0, 0].magnitude
-        self.hl = dia.contour(self.X, self.Y, self.vals / hl_scale_factor, 35, zorder=0, colors='black')
+        self.hl = dia.contour(self.X.magnitude, self.Y.magnitude, self.vals.magnitude / hl_scale_factor, 35, zorder=0, colors='black')
         plt.clabel(self.hl, inline=1, fontsize=12, fmt=lambda x: f"{x:.2f}")
 
     def plot_and_store_fig(self, fig_01):
@@ -689,4 +693,5 @@ def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_di
 
 
 if __name__ == '__main__':
+    warnings.filterwarnings('error', category=UnitStrippedWarning)
     cplot()
