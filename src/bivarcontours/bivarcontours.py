@@ -288,6 +288,12 @@ def _set_correct_units_for_dimension(dimension, min_value, max_value, step_value
     return min_value_with_unit, max_value_with_unit, step_value_with_unit
 
 
+def set_axis_format(dia):
+    for axis in [dia.xaxis]:
+        axis.set_major_formatter(ScalarFormatter())
+        axis.set_minor_formatter(NullFormatter())
+
+
 class Contour:
     """
 
@@ -327,7 +333,7 @@ class Contour:
     """
 
     def __init__(self, title, label_1, label_2, formula, dim_res, min_1, max_1, step_1, dim_1, min_2, max_2, step_2,
-                 dim_2, swap_axes, verbose=False):
+                 dim_2, x_log, y_log, swap_axes, verbose):
         # type checks
         assert isinstance(title, str), "title should be a string"
         assert isinstance(label_1, str), "label_1 should be a string"
@@ -339,6 +345,8 @@ class Contour:
         assert isinstance(min_2, (int, float)), "min_2 should be a number"
         assert isinstance(max_2, (int, float)), "max_2 should be a number"
         assert isinstance(step_2, (int, float)), "step_2 should be a number"
+        assert isinstance(x_log, bool), "x_log should be a boolean"
+        assert isinstance(y_log, bool), "y_log should be a boolean"
         assert isinstance(swap_axes, str), "swap_axes should be a string"
         assert isinstance(verbose, bool), "verbose should be a boolean"
 
@@ -379,7 +387,20 @@ class Contour:
         self.title = title
         self.formula = formula
         self.dim_res = dim_res
+        self.x_log = x_log
+        self.y_log = y_log
         self.verbose = verbose
+
+    def initialize_logarithmic_x_axis(self):
+        if self.x_log:
+            plt.xscale('log')
+
+
+    def initialize_logarithmic_y_axis(self):
+        if self.y_log:
+            plt.yscale('log')
+
+
 
     def initialize_swapping_axes(self, label_1, label_2, min_1, max_1, step_1, dim_1, min_2, max_2, step_2, dim_2):
         """
@@ -502,7 +523,10 @@ class Contour:
         :return: The generated filename for saving the contour figure.
         :rtype: str
         """
-        dim_res = self.dim_res.replace("", "dimensionless")
+        if self.dim_res == "":
+            dim_res = self.dim_res.replace("", "dimensionless")
+        else:
+            dim_res = self.dim_res
 
         self.filename = (f'F_{self.title}_{dim_res}_X_{self.dim_1}_{self.x_values[0].magnitude:.2f}-{self.x_values[-1].magnitude:.2f}_Y_{self.dim_2}_{(self.y_values[0].magnitude):.2f}-{(self.y_values[-1].magnitude):.2f}.png')
 
@@ -554,8 +578,8 @@ class Contour:
         x_ticks_in_range = all(x_range[0] <= tick <= x_range[1] for tick in tick_x_values)
         y_ticks_in_range = all(y_range[0] <= tick <= y_range[1] for tick in tick_y_values)
         if self.verbose:
-            print('x_ticks = ', [f'{tick:2f}' for tick in tick_x_values])
-            print('y_ticks = ', [f'{tick:2f}' for tick in tick_y_values])
+            print('x_ticks = ', [str(tick) for tick in tick_x_values])
+            print('y_ticks = ', [str(tick) for tick in tick_y_values])
 
         if not x_ticks_in_range:
             raise ValueError(f"x-tick values are outside of data range! {x_range[0]}-{x_range[1]}")
@@ -565,7 +589,9 @@ class Contour:
     def create_diagram(self):
 
         fig_01, dia = self.create_figure_with_grid()
-        self.set_axis_format(dia)
+        self.initialize_logarithmic_x_axis(dia)
+        self.initialize_logarithmic_y_axis(dia)
+        set_axis_format(dia)
         self.set_axis_ticks_and_limits(dia)
         self.display_tick_labels(dia)
         self.set_labels_and_title(dia)
@@ -579,11 +605,6 @@ class Contour:
         dia.grid(True)
         return fig_01, dia
 
-    def set_axis_format(self, dia):
-        for axis in [dia.xaxis]:
-            axis.set_major_formatter(ScalarFormatter())
-            axis.set_minor_formatter(NullFormatter())
-
     def set_axis_ticks_and_limits(self, dia):
         x_dim_values = self.x_values.magnitude
         y_dim_values = self.y_values.magnitude
@@ -595,8 +616,8 @@ class Contour:
     def display_tick_labels(self, dia):
         xticks_with_unit = (dia.get_xticks() * self.base_unit_1)
         yticks_with_unit = (dia.get_yticks() * self.base_unit_2)
-        dia.set_xticklabels([f'{tick.to(self.dim_1).magnitude:.2f}' for tick in xticks_with_unit])
-        dia.set_yticklabels([f'{tick.to(self.dim_2).magnitude:.2f}' for tick in yticks_with_unit])
+        dia.set_xticklabels([f'{tick.to(self.dim_1).magnitude:.3g}' for tick in xticks_with_unit])
+        dia.set_yticklabels([f'{tick.to(self.dim_2).magnitude:.3g}' for tick in yticks_with_unit])
         self.check_ticks_in_range(dia, self.x_values.magnitude, self.y_values.magnitude)
 
         if self.verbose:
@@ -615,9 +636,9 @@ class Contour:
         hl_with_unit = self.vals
         scaled_hl_with_unit = self.vals.to(self.dim_res)
         hl_scale_factor = hl_with_unit[0, 0].magnitude / scaled_hl_with_unit[0, 0].magnitude
-        self.hl = dia.contour(self.X.magnitude, self.Y.magnitude, self.vals.magnitude / hl_scale_factor, 35, zorder=0, colors='black')
-        # self.hl = dia.contour(self.X.magnitude, self.Y.magnitude, self.vals.magnitude, 35, zorder=0, colors='black')
-        plt.clabel(self.hl, inline=1, fontsize=12, fmt=lambda x: f"{x:.2f}")
+        # self.hl = dia.contour(self.X.magnitude, self.Y.magnitude, self.vals.magnitude / hl_scale_factor, 35, zorder=0, colors='black')
+        self.hl = dia.contour(self.X.magnitude, self.Y.magnitude, self.vals.magnitude, 35, zorder=0, colors='black')
+        plt.clabel(self.hl, inline=1, fontsize=12, fmt=lambda x: f"{x:.2g}")
 
     def plot_and_store_fig(self, fig_01):
         plt.show()
@@ -635,7 +656,7 @@ class Contour:
         self.initialize_diagram_labels()
         self.set_values_for_contour_calc_with_scalars_scaled_to_base_units()
         self.filename_for_saved_contour_figure()
-        print(f"diagram_name: {self.filename}")
+        print(f"filename: {self.filename}")
         self.compute_values()
         self.create_diagram()
         # plt.show()
@@ -655,11 +676,12 @@ class Contour:
 @click.argument('y_stop', type=float)
 @click.argument('y_step', type=float)
 @click.argument('y_dim', type=str)
-@click.argument('swap_axes', type=str)
-@click.option('--verbose', '-v', default=False, help='print verbose information on screen')
+@click.option('--x_log', '-xl', default=False, help='set the scale of the x-axis to logarithmic', is_flag=True)
+@click.option('--x_log', '-yl', default=False, help='set the scale of the y-axis to logarithmic', is_flag=True)
+@click.option('--swap_axes', '-s', default=False, help='swap x- and y-axes', is_flag=True)
+@click.option('--verbose', '-v', default=False, help='print verbose information on screen', is_flag=True)
 def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_start, y_stop, y_step, y_dim,
-          swap_axes,
-          verbose):
+          x_log, y_log, swap_axes, verbose):
     """
 
     :param title: The title of the contour plot
@@ -675,6 +697,8 @@ def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_di
     :param y_stop: The stopping value of the y-axis
     :param y_step: The step size of the y-axis
     :param y_dim: The dimension of the y-axis values
+    :param x_log: Logarithm of the x-axis
+    :param y_log: Logarithm of the y-axis
     :param swap_axes: The flag indicating whether to swap the x and y axes
     :param verbose: The flag indicating whether to print verbose information on the screen
     :return: None
@@ -683,13 +707,13 @@ def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_di
     click.echo(
         f"Running --cplot with title {title}, x_label {x_label}, y_label {y_label}, formula {formula}, x_start {x_start}, "
         f"x_stop {x_stop}, x_step {x_step}, x_dim {x_dim}, y_start {y_start}, y_stop {y_stop}, y_step {y_step}, "
-        f"y_dim {y_dim}, swap_axes {swap_axes}, verbose {verbose}")
+        f"y_dim {y_dim}, x_log {x_log}, y_log {y_log},swap_axes {swap_axes}, verbose {verbose}")
     label_x_dimension = Q_(1, x_dim).units
     label_y_dimension = Q_(1, y_dim).units
     x_label = f"{x_label} [{label_x_dimension:~P}]"
     y_label = f"{y_label} [{label_y_dimension:~P}]"
     c_c = Contour(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_start, y_stop, y_step,
-                  y_dim, swap_axes, verbose)
+                  y_dim, x_log, y_log, swap_axes, verbose)
     c_c.run()
 
 
