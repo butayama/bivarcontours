@@ -294,6 +294,16 @@ def set_axis_format(dia):
         axis.set_minor_formatter(NullFormatter())
 
 
+def initialize_logarithmic_x_axis(x_log, dia):
+    if x_log:
+        dia.set_xscale('log')
+
+
+def initialize_logarithmic_y_axis(y_log, dia):
+    if y_log:
+        dia.set_yscale('log')
+
+
 class Contour:
     """
 
@@ -313,6 +323,8 @@ class Contour:
     - max_2 (float): The maximum value for the second dimension
     - step_2 (float): The step size for the second dimension
     - dim_2 (str): The dimension unit for the second dimension
+    - x_log (bool): Indicates whether the x_axis should be drawn in a logarithmic scale
+    - y_log (bool): Indicates whether the y_axis should be drawn in logarithmic scale
     - swap_axes (bool): Indicates whether to swap the axes of the contour plot
     - verbose (bool): Indicates whether to include verbose output during computation
 
@@ -334,6 +346,7 @@ class Contour:
 
     def __init__(self, title, label_1, label_2, formula, dim_res, min_1, max_1, step_1, dim_1, min_2, max_2, step_2,
                  dim_2, x_log, y_log, swap_axes, verbose):
+
         # type checks
         assert isinstance(title, str), "title should be a string"
         assert isinstance(label_1, str), "label_1 should be a string"
@@ -347,7 +360,7 @@ class Contour:
         assert isinstance(step_2, (int, float)), "step_2 should be a number"
         assert isinstance(x_log, bool), "x_log should be a boolean"
         assert isinstance(y_log, bool), "y_log should be a boolean"
-        assert isinstance(swap_axes, str), "swap_axes should be a string"
+        assert isinstance(swap_axes, bool), "swap_axes should be a boolean"
         assert isinstance(verbose, bool), "verbose should be a boolean"
 
         # value checks
@@ -356,7 +369,6 @@ class Contour:
         assert min_2 < max_2, "min_2 should be less than max_2"
         assert step_1 > 0, "step_1 should be a positive number"
         assert step_2 > 0, "step_2 should be a positive number"
-        assert swap_axes.lower() in ["true", "false", "True", "False"], "swap_axes should be either 'true' or 'false'"
 
         self.step_2_interval = None
         self.step_1_interval = None
@@ -382,25 +394,14 @@ class Contour:
         self.base_unit_1 = None
         self.start_1 = None
         self.unity_res = None
-        self.are_axes_swapped = swap_axes.lower() == 'true'
-        self.initialize_swapping_axes(label_1, label_2, min_1, max_1, step_1, dim_1, min_2, max_2, step_2, dim_2)
         self.title = title
         self.formula = formula
         self.dim_res = dim_res
         self.x_log = x_log
         self.y_log = y_log
+        self.swap_axes = swap_axes
+        self.initialize_swapping_axes(label_1, label_2, min_1, max_1, step_1, dim_1, min_2, max_2, step_2, dim_2)
         self.verbose = verbose
-
-    def initialize_logarithmic_x_axis(self):
-        if self.x_log:
-            plt.xscale('log')
-
-
-    def initialize_logarithmic_y_axis(self):
-        if self.y_log:
-            plt.yscale('log')
-
-
 
     def initialize_swapping_axes(self, label_1, label_2, min_1, max_1, step_1, dim_1, min_2, max_2, step_2, dim_2):
         """
@@ -419,7 +420,7 @@ class Contour:
         :return: None
         """
 
-        if self.are_axes_swapped:
+        if self.swap_axes:
             self.label_1 = label_2
             self.label_2 = label_1
             self.min_1 = min_2
@@ -497,8 +498,8 @@ class Contour:
 
         :return: None
         """
-        self.label_x = self.label_2 if self.are_axes_swapped else self.label_1
-        self.label_y = self.label_1 if self.are_axes_swapped else self.label_2
+        self.label_x = self.label_2 if self.swap_axes else self.label_1
+        self.label_y = self.label_1 if self.swap_axes else self.label_2
 
     def set_values_for_contour_calc_with_scalars_scaled_to_base_units(self):
         """
@@ -528,7 +529,8 @@ class Contour:
         else:
             dim_res = self.dim_res
 
-        self.filename = (f'F_{self.title}_{dim_res}_X_{self.dim_1}_{self.x_values[0].magnitude:.2f}-{self.x_values[-1].magnitude:.2f}_Y_{self.dim_2}_{(self.y_values[0].magnitude):.2f}-{(self.y_values[-1].magnitude):.2f}.png')
+        self.filename = (
+            f'F_{self.title}_{dim_res}_X_{self.dim_1}_{self.x_values[0].magnitude:.2f}-{self.x_values[-1].magnitude:.2f}_Y_{self.dim_2}_{(self.y_values[0].magnitude):.2f}-{(self.y_values[-1].magnitude):.2f}.png')
 
     def compute_values(self):
         """
@@ -589,8 +591,8 @@ class Contour:
     def create_diagram(self):
 
         fig_01, dia = self.create_figure_with_grid()
-        self.initialize_logarithmic_x_axis(dia)
-        self.initialize_logarithmic_y_axis(dia)
+        initialize_logarithmic_x_axis(self.x_log, dia)
+        initialize_logarithmic_y_axis(self.y_log, dia)
         set_axis_format(dia)
         self.set_axis_ticks_and_limits(dia)
         self.display_tick_labels(dia)
@@ -676,8 +678,8 @@ class Contour:
 @click.argument('y_stop', type=float)
 @click.argument('y_step', type=float)
 @click.argument('y_dim', type=str)
-@click.option('--x_log', '-xl', default=False, help='set the scale of the x-axis to logarithmic', is_flag=True)
-@click.option('--x_log', '-yl', default=False, help='set the scale of the y-axis to logarithmic', is_flag=True)
+@click.option('--x_log', '-x', default=False, help='set the scale of the x-axis to logarithmic', is_flag=True)
+@click.option('--y_log', '-y', default=False, help='set the scale of the y-axis to logarithmic', is_flag=True)
 @click.option('--swap_axes', '-s', default=False, help='swap x- and y-axes', is_flag=True)
 @click.option('--verbose', '-v', default=False, help='print verbose information on screen', is_flag=True)
 def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_start, y_stop, y_step, y_dim,
