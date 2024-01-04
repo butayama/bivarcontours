@@ -254,20 +254,24 @@ def unit_validation(dims):
             raise UnitError(f"Dimension {dim} is not defined in the pint module") from e
 
 
-def _convert_units_to_dimensionless_and_get_interval(min_value, max_value, step_value):
+def _convert_units_to_dimensionless_and_get_interval(min_value, max_value, step_value, num):
     """
     Converts units to dimensionless and returns the start, base unit, stop, and interval.
 
     :param min_value: The minimum value with units.
     :param max_value: The maximum value with units.
     :param step_value: The step value with units.
+    :param num: Boolean, if true, the step_value will be converted to an integer without converting to bas unit
     :return: A tuple containing the start (dimensionless), base unit (dimensionless),
         stop (dimensionless), and interval (dimensionless).
     """
     start = min_value.to_base_units().magnitude
     base_unit = min_value.to_base_units().units
     stop = max_value.to_base_units().magnitude
-    interval = step_value.to_base_units().magnitude
+    if num:
+        interval = int(step_value.magnitude)
+    else:
+        interval = step_value.to_base_units().magnitude
     return start, base_unit, stop, interval
 
 
@@ -288,20 +292,30 @@ def _set_correct_units_for_dimension(dimension, min_value, max_value, step_value
     return min_value_with_unit, max_value_with_unit, step_value_with_unit
 
 
-def set_axis_format(dia):
+def _set_axis_format(dia):
     for axis in [dia.xaxis]:
         axis.set_major_formatter(ScalarFormatter())
         axis.set_minor_formatter(NullFormatter())
 
 
-def initialize_logarithmic_x_axis(x_log, dia):
+def _initialize_logarithmic_x_axis(x_log, dia):
     if x_log:
         dia.set_xscale('log')
 
 
-def initialize_logarithmic_y_axis(y_log, dia):
+def _initialize_logarithmic_y_axis(y_log, dia):
     if y_log:
         dia.set_yscale('log')
+
+
+def _generate_values(start, stop, step_interval, nstep, log):
+    # Generate numpy arrays
+    if nstep and log:
+        return np.logspace(np.log10(start), np.log10(stop), num=int(step_interval))
+    elif nstep and not log:
+        return np.linspace(start, stop, int(step_interval))
+    else:
+        return np.arange(start, stop, step=step_interval)
 
 
 class Contour:
@@ -317,12 +331,14 @@ class Contour:
     - dim_res (str): The dimensional resolution of the contour plot
     - min_1 (float): The minimum value for the first dimension
     - max_1 (float): The maximum value for the first dimension
-    - step_1 (float): The step size for the first dimension
+    - step_1 (float / int): The step size for the first dimension or the number of instances to create (nstep = True)
     - dim_1 (str): The dimension unit for the first dimension
     - min_2 (float): The minimum value for the second dimension
     - max_2 (float): The maximum value for the second dimension
-    - step_2 (float): The step size for the second dimension
+    - step_2 (float / int): The step size for the second dimension or the number of instances to create (nstep = True)
     - dim_2 (str): The dimension unit for the second dimension
+    - nstep_x (bool): Whether the x-values are calculated by step size or number of instances to create (nstep = True)
+    - nstep_y (bool): Whether the y-values are calculated by step size or number of instances to create (nstep = True)
     - x_log (bool): Indicates whether the x_axis should be drawn in a logarithmic scale
     - y_log (bool): Indicates whether the y_axis should be drawn in logarithmic scale
     - swap_axes (bool): Indicates whether to swap the axes of the contour plot
@@ -345,7 +361,7 @@ class Contour:
     """
 
     def __init__(self, title, label_1, label_2, formula, dim_res, min_1, max_1, step_1, dim_1, min_2, max_2, step_2,
-                 dim_2, x_log, y_log, swap_axes, verbose):
+                 dim_2, nstep_x, nstep_y, x_log, y_log, swap_axes, verbose):
 
         # type checks
         assert isinstance(title, str), "title should be a string"
@@ -358,6 +374,8 @@ class Contour:
         assert isinstance(min_2, (int, float)), "min_2 should be a number"
         assert isinstance(max_2, (int, float)), "max_2 should be a number"
         assert isinstance(step_2, (int, float)), "step_2 should be a number"
+        assert isinstance(nstep_x, bool), "nstep_x should be a boolean"
+        assert isinstance(nstep_y, bool), "nstep_y should be a boolean"
         assert isinstance(x_log, bool), "x_log should be a boolean"
         assert isinstance(y_log, bool), "y_log should be a boolean"
         assert isinstance(swap_axes, bool), "swap_axes should be a boolean"
@@ -397,6 +415,8 @@ class Contour:
         self.title = title
         self.formula = formula
         self.dim_res = dim_res
+        self.nstep_x = nstep_x
+        self.nstep_y = nstep_y
         self.x_log = x_log
         self.y_log = y_log
         self.swap_axes = swap_axes
@@ -479,7 +499,8 @@ class Contour:
         min_1_with_unit, max_1_with_unit, step_1_with_unit = (
             _set_correct_units_for_dimension(self.dim_1, self.min_1, self.max_1, self.step_1))
         self.start_1, self.base_unit_1, self.stop_1, self.step_1_interval = (
-            _convert_units_to_dimensionless_and_get_interval(min_1_with_unit, max_1_with_unit, step_1_with_unit))
+            _convert_units_to_dimensionless_and_get_interval(min_1_with_unit, max_1_with_unit, step_1_with_unit,
+                                                             self.nstep_x))
 
     def initialize_dimension_two_values(self):
         """
@@ -490,7 +511,8 @@ class Contour:
         min_2_with_unit, max_2_with_unit, step_2_with_unit = (
             _set_correct_units_for_dimension(self.dim_2, self.min_2, self.max_2, self.step_2))
         self.start_2, self.base_unit_2, self.stop_2, self.step_2_interval = (
-            _convert_units_to_dimensionless_and_get_interval(min_2_with_unit, max_2_with_unit, step_2_with_unit))
+            _convert_units_to_dimensionless_and_get_interval(min_2_with_unit, max_2_with_unit, step_2_with_unit,
+                                                             self.nstep_y))
 
     def initialize_diagram_labels(self):
         """
@@ -504,14 +526,16 @@ class Contour:
     def set_values_for_contour_calc_with_scalars_scaled_to_base_units(self):
         """
         Sets the values for the X and Y coordinates to be used in contour calculation.
-        The X values are generated using the given start_1, stop_1, and step_1_interval parameters.
-        The Y values are generated using the given start_2, stop_2, and step_2_interval parameters.
-
+        The X values are generated using the given start_1, stop_1, step_1_interval nstep_x, and x_log parameters.
+        The Y values are generated using the given start_2, stop_2, step_2_interval nstep_y, and y_log parameters.
+        Depending on the nstep and log parameters, steps or a number of samples either linear or logarithmic are
+        generated.
         :return: None
         """
-        # Generate numpy arrays
-        self.x_np_values = np.arange(self.start_1, self.stop_1, step=self.step_1_interval)
-        self.y_np_values = np.arange(self.start_2, self.stop_2, step=self.step_2_interval)
+        self.x_np_values = _generate_values(self.start_1, self.stop_1, self.step_1_interval, self.nstep_x,
+                                            self.x_log)
+        self.y_np_values = _generate_values(self.start_2, self.stop_2, self.step_2_interval, self.nstep_y,
+                                            self.y_log)
 
         #  use Pint's Quantity object to wrap the numpy.ndarray
         self.x_values = Q_(self.x_np_values, self.base_unit_1)
@@ -591,9 +615,9 @@ class Contour:
     def create_diagram(self):
 
         fig_01, dia = self.create_figure_with_grid()
-        initialize_logarithmic_x_axis(self.x_log, dia)
-        initialize_logarithmic_y_axis(self.y_log, dia)
-        set_axis_format(dia)
+        _initialize_logarithmic_x_axis(self.x_log, dia)
+        _initialize_logarithmic_y_axis(self.y_log, dia)
+        _set_axis_format(dia)
         self.set_axis_ticks_and_limits(dia)
         self.display_tick_labels(dia)
         self.set_labels_and_title(dia)
@@ -678,12 +702,18 @@ class Contour:
 @click.argument('y_stop', type=float)
 @click.argument('y_step', type=float)
 @click.argument('y_dim', type=str)
-@click.option('--x_log', '-x', default=False, help='set the scale of the x-axis to logarithmic', is_flag=True)
-@click.option('--y_log', '-y', default=False, help='set the scale of the y-axis to logarithmic', is_flag=True)
+@click.option('--nstep_x', '-nx', default=False,
+              help='switch from x_step to number of samples to generate between x_start and x_stop', is_flag=True)
+@click.option('--nstep_y', '-ny', default=False,
+              help='switch from y_step to number of samples to generate between y_start and y_stop', is_flag=True)
+@click.option('--x_log', '-xl', default=False, help='set the scale of the x-axis to logarithmic',
+              is_flag=True)
+@click.option('--y_log', '-yl', default=False, help='set the scale of the y-axis to logarithmic',
+              is_flag=True)
 @click.option('--swap_axes', '-s', default=False, help='swap x- and y-axes', is_flag=True)
 @click.option('--verbose', '-v', default=False, help='print verbose information on screen', is_flag=True)
 def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_start, y_stop, y_step, y_dim,
-          x_log, y_log, swap_axes, verbose):
+          nstep_x, nstep_y, x_log, y_log, swap_axes, verbose):
     """
 
     :param title: The title of the contour plot
@@ -699,6 +729,8 @@ def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_di
     :param y_stop: The stopping value of the y-axis
     :param y_step: The step size of the y-axis
     :param y_dim: The dimension of the y-axis values
+    :param nstep_x: switch from x_step to number of samples to generate between x_start and x_stop
+    :param nstep_y: switch from y_step to number of samples to generate between y_start and y_stop
     :param x_log: Logarithm of the x-axis
     :param y_log: Logarithm of the y-axis
     :param swap_axes: The flag indicating whether to swap the x and y axes
@@ -707,15 +739,16 @@ def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_di
 
     """
     click.echo(
-        f"Running --cplot with title {title}, x_label {x_label}, y_label {y_label}, formula {formula}, x_start {x_start}, "
-        f"x_stop {x_stop}, x_step {x_step}, x_dim {x_dim}, y_start {y_start}, y_stop {y_stop}, y_step {y_step}, "
-        f"y_dim {y_dim}, x_log {x_log}, y_log {y_log},swap_axes {swap_axes}, verbose {verbose}")
+        f"Running --cplot with title {title}, x_label {x_label}, y_label {y_label}, formula {formula}, "
+        f"x_start {x_start}, x_stop {x_stop}, x_step {x_step}, x_dim {x_dim}, y_start {y_start}, y_stop {y_stop}, "
+        f"y_step {y_step}, y_dim {y_dim}, nstep_x {nstep_x}, nstep_y {nstep_y}, x_log {x_log}, y_log {y_log},"
+        f"swap_axes {swap_axes}, verbose {verbose}")
     label_x_dimension = Q_(1, x_dim).units
     label_y_dimension = Q_(1, y_dim).units
     x_label = f"{x_label} [{label_x_dimension:~P}]"
     y_label = f"{y_label} [{label_y_dimension:~P}]"
     c_c = Contour(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_start, y_stop, y_step,
-                  y_dim, x_log, y_log, swap_axes, verbose)
+                  y_dim, nstep_x, nstep_y, x_log, y_log, swap_axes, verbose)
     c_c.run()
 
 
