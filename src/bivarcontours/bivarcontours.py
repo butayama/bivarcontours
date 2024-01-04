@@ -612,10 +612,11 @@ class Contour:
 
     def generate_contour_plot(self, dia):
         img = dia.contourf(self.X.magnitude, self.Y.magnitude, self.vals.magnitude, 35, zorder=0, cmap='Spectral')
-        hl_with_unit = self.vals * self.unity_res
-        scaled_hl_with_unit = hl_with_unit.to(self.dim_res)
+        hl_with_unit = self.vals
+        scaled_hl_with_unit = self.vals.to(self.dim_res)
         hl_scale_factor = hl_with_unit[0, 0].magnitude / scaled_hl_with_unit[0, 0].magnitude
         self.hl = dia.contour(self.X.magnitude, self.Y.magnitude, self.vals.magnitude / hl_scale_factor, 35, zorder=0, colors='black')
+        # self.hl = dia.contour(self.X.magnitude, self.Y.magnitude, self.vals.magnitude, 35, zorder=0, colors='black')
         plt.clabel(self.hl, inline=1, fontsize=12, fmt=lambda x: f"{x:.2f}")
 
     def plot_and_store_fig(self, fig_01):
