@@ -70,7 +70,7 @@ if __name__ == '__main__':
     sympy_unit = pint_to_sympy_quantity(value, pint_unit)
 
     # Create a sympy quantity
-    sympy_quantity = pint_quantity.magnitude * sympy_unit
+    sympy_quantity = pint_quantity.magnitude
 
     print(f"pint_quantity = {pint_quantity}, pint_unit = {pint_unit}, sympy_unit = {sympy_unit}, "
           f" sympy_quantity = {sympy_quantity}")
@@ -78,15 +78,9 @@ if __name__ == '__main__':
     print("Convert Sympy to Pint Quantity")
 
     # Create a SymPy quantity
-    sympy_quantity = value * sympy_unit
+    sympy_quantity = sympy_unit
 
     # Convert to Pint Quantity
     pint_quantity = sympy_to_pint_quantity(sympy_quantity)
-
-    # Map the sympy unit with pint unit
-    pint_unit = sympy_to_pint_mapping[sympy_unit]
-
-    # Create a Pint quantity
-    pint_quantity = value * pint_unit
 
     print(f"sympy_quantity = {sympy_quantity}, pint_unit = {pint_unit}, pint_quantity = {pint_quantity}")
