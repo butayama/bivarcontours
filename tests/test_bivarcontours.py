@@ -5,11 +5,27 @@ Python files in bivarcontours/tests/
 are found without needing to attempt relative import.
 """
 
-from bivarcontours.bivarcontours import cplot, calculate_z, unit_validation, Contour, UnitError
+from bivarcontours.bivarcontours import cplot, calculate_z, unit_validation, Contour, UnitError, result_unit
 from click.testing import CliRunner
 import pytest
 from pint import UndefinedUnitError, DimensionalityError
+from sympy import symbols, sympify
+import sympy.physics.units as sympy_units
+from pint import UnitRegistry
+ureg = UnitRegistry()
+Q_ = ureg.Quantity
+SIBASE = sympy_units.UnitSystem.get_unit_system("SI")._base_units
 
+def test_result_unit():
+    x_sym, y_sym = symbols('x y')
+    parsed_formula = sympify("x*y")
+    x_unit = "m"
+    y_unit = "m"
+    res_unit = Q_(1, "meter**2").dimensionality
+    res_unit_1 = Q_(1, "meter**2").units
+
+    result = result_unit(parsed_formula, x_sym, y_sym, x_unit, y_unit)
+    assert result == res_unit_1
 
 def test_bivarcontours():
     runner = CliRunner()

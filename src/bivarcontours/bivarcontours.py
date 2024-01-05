@@ -41,7 +41,7 @@ import numexpr as ne
 import seaborn as sns
 import numpy as np
 from pint import UnitRegistry, UndefinedUnitError, DimensionalityError, UnitStrippedWarning
-from sympy import symbols, Matrix
+from sympy import symbols, Matrix, Expr
 from sympy.core import Float, sympify
 from sympy.tensor.array import ImmutableDenseNDimArray
 from sympy.abc import x, y
@@ -51,6 +51,7 @@ import warnings
 
 ureg = UnitRegistry()
 Q_ = ureg.Quantity
+SIBASE = sympy_units.UnitSystem.get_unit_system("SI")._base_units
 color = sns.color_palette()
 FIGURE_SIZE = 10
 TITLE_FONTSIZE = 14
@@ -61,13 +62,15 @@ SCALING_FACTOR = 10 ** SCALING_EXPONENT
 X, Y = symbols('X Y')
 
 
-def result_unit(parsed_formula, x_sym, y_sym, x_base, y_base):
-    # Calculate the formula with replaced dimensionless values
-    substituted_formula = parsed_formula.subs({x_sym: 1, y_sym: 1})  # replace with 1, as it won't affect units
+def result_unit(parsed_formula, x_sym, y_sym, x_unit, y_unit):
+    # substitute the symbols with their corresponding units
+    base_x_units = sympy_units.util.convert_to(x_unit, SIBASE).n(2)
+    base_y_units = sympy_units.util.convert_to(y_unit, SIBASE).n(2)
 
-    # Units will propagate appropriately as we're multiplying with original units
-    expected_result_unit = substituted_formula.evalf(subs={x_sym: x_base, y_sym: y_base})
-    return expected_result_unit
+    units_expr = parsed_formula.subs({x_sym: base_x_units, y_sym: base_y_units})
+    # evaluate the units expression to get result
+    # units_result = ureg.parse_expression(str(units_expr))
+    return units_expr
 
 
 def runtime_calculate_z(formula_, x_, y_, x_base, y_base, z_dim):
