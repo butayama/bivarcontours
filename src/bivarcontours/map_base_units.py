@@ -1,5 +1,6 @@
 from pint import UnitRegistry
-from sympy.physics.units import (ampere, candela, kelvin, kilogram, meter, mole, radian, second)
+from sympy import sympify
+from sympy.physics.units import meter, second, ampere, candela, kilogram, mole, kelvin, radian
 
 UREG = UnitRegistry()
 unit_mapping_pint_sympy = {
@@ -41,8 +42,21 @@ def create_sympy_quantity(value, sympy_unit):
 
 
 def sympy_to_pint_quantity(sympy_quantity):
+    if isinstance(sympy_quantity, (int, float)):  # handle primitive types
+        return create_pint_quantity(sympy_quantity, 'dimensionless')
+
     value, sympy_unit = sympy_quantity.args
-    pint_unit = sympy_to_pint_mapping[sympy_unit]
+
+    # Check if sympy_unit is a string representation of a sympy physical unit
+    sympy_units = [meter, second, ampere, candela, kilogram, mole, kelvin, radian]
+    if str(sympy_unit) in map(str, sympy_units):
+        sympy_unit = [unit for unit in sympy_units if str(unit) == str(sympy_unit)][0]
+
+    # Attempt to get the pint unit
+    try:
+        pint_unit = sympy_to_pint_mapping[sympy_unit]
+    except KeyError:
+        raise KeyError(f"{sympy_unit} is not a key in the sympy_to_pint_mapping dictionary.")
     return create_pint_quantity(value, pint_unit)
 
 

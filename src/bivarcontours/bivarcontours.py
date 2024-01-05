@@ -48,6 +48,7 @@ from sympy.abc import x, y
 from sympy.parsing.sympy_parser import parse_expr
 import sympy.physics.units as sympy_units
 import warnings
+from map_base_units import create_pint_quantity, pint_to_sympy_unit, create_sympy_quantity, sympy_to_pint_quantity
 
 ureg = UnitRegistry()
 Q_ = ureg.Quantity
@@ -67,6 +68,7 @@ def result_unit(parsed_formula, x_sym, y_sym, x_unit, y_unit):
     base_x_units = sympy_units.util.convert_to(x_unit, SIBASE).n(2)
     base_y_units = sympy_units.util.convert_to(y_unit, SIBASE).n(2)
 
+    # Create an expression in base units
     units_expr = parsed_formula.subs({x_sym: base_x_units, y_sym: base_y_units})
     # evaluate the units expression to get result
     # units_result = ureg.parse_expression(str(units_expr))
@@ -120,8 +122,17 @@ def runtime_calculate_z(formula_, x_, y_, x_base, y_base, z_dim):
         parsed_formula = sympify(formula_)
     except Exception as e:
         raise ValueError("invalidFormula") from e
-    expected_result_unit = result_unit(parsed_formula, x_sym, y_sym, x_base, y_base)
 
+    # sympy_x_unit = pint_to_sympy_unit(x_base.magnitude, x_base.units)
+    # sympy_x_base = create_sympy_quantity(x_base.magnitude, sympy_x_unit)
+    #
+    # sympy_y_unit = pint_to_sympy_unit(y_base.magnitude, y_base.units)
+    # sympy_y_base = create_sympy_quantity(y_base.magnitude, sympy_y_unit)
+
+    # Convert the result back to pint Quantity with the appropriate unit
+    # expected_result_unit = result_unit(parsed_formula, x_sym, y_sym, sympy_x_base, sympy_y_base)
+    expected_result_unit_sympy = result_unit(parsed_formula, x_sym, y_sym, x_base, y_base)
+    expected_result_unit = sympy_to_pint_quantity(expected_result_unit_sympy)
     # Validate the units during computation.
     # If expected_result_unit is a float, but it's supposed to be dimensionless,
     # set it to 'dimensionless' or an empty string
@@ -217,9 +228,15 @@ def calculate_z(formula_, x_, y_, z_dim):
     # result = parsed_formula.evalf(subs={x_sym: x_base.magnitude, y_sym: y_base.magnitude})
     result = matrix_form.evalf()
 
-    # Convert the result back to pint Quantity with the appropriate unit
-    expected_result_unit = result_unit(parsed_formula, x_sym, y_sym, x_base, y_base)
+    sympy_x_unit = pint_to_sympy_unit(x_base.magnitude, x_base.units)
+    sympy_x_base = create_sympy_quantity(x_base.magnitude, sympy_x_unit)
 
+    sympy_y_unit = pint_to_sympy_unit(y_base.magnitude, y_base.units)
+    sympy_y_base = create_sympy_quantity(y_base.magnitude, sympy_y_unit)
+
+    # Convert the result back to pint Quantity with the appropriate unit
+    expected_result_unit_sympy = result_unit(parsed_formula, x_sym, y_sym, sympy_x_base, sympy_y_base)
+    expected_result_unit = sympy_to_pint_quantity(expected_result_unit_sympy)
     # Validate the units during computation.
     # If expected_result_unit is a float, but it's supposed to be dimensionless,
     # set it to 'dimensionless' or an empty string
