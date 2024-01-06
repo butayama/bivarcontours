@@ -5,33 +5,53 @@ Python files in bivarcontours/tests/
 are found without needing to attempt relative import.
 """
 
-from bivarcontours.bivarcontours import cplot, calculate_z, unit_validation, Contour, UnitError, result_unit
+from bivarcontours.bivarcontours import (cplot, calculate_z, calculate_formula_dimension, unit_validation, Contour,
+                                         UnitError, result_unit_of_formula)
 from click.testing import CliRunner
 import pytest
 from pint import UndefinedUnitError, DimensionalityError
 from sympy import symbols, sympify
 import sympy.physics.units as sympy_units
 from pint import UnitRegistry
-ureg = UnitRegistry()
-Q_ = ureg.Quantity
+
 SIBASE = sympy_units.UnitSystem.get_unit_system("SI")._base_units
+from bivarcontours.unit_handling.map_base_units import UnitQuantity, UREG, sympy_to_pint_quantity
 
-def test_result_unit():
+
+def test_result_unit_of_formula():
     x_sym, y_sym = symbols('x y')
-    parsed_formula = sympify("x*y")
-    x_unit = "m"
-    y_unit = "m"
-    res_unit = Q_(1, "meter**2").dimensionality
-    res_unit_1 = Q_(1, "meter**2").units
+    parsed_formula = sympify("x+y")
+    x_unit = "meter"
+    y_unit = "meter"
+    res_unit = UnitQuantity(1, "meter").units
 
-    result = result_unit(parsed_formula, x_sym, y_sym, x_unit, y_unit)
-    assert result == res_unit_1
+    result = result_unit_of_formula(parsed_formula, x_sym, y_sym, x_unit, y_unit)
+    res_unit = sympy_to_pint_quantity(result).units
+    assert res_unit == res_unit
+
+    parsed_formula = sympify("x*y")
+    result = result_unit_of_formula(parsed_formula, x_sym, y_sym, x_unit, y_unit)
+    res_unit = sympy_to_pint_quantity(result).units
+    assert res_unit == res_unit
+
 
 def test_bivarcontours():
     runner = CliRunner()
     result = runner.invoke(cplot, ["Test_Rechteck_Flaeche", "a", "b", "x * y", "m**2", "0.1", "2",
                                    "0.2", "m", "0.2", "3", "0.3", "m", "false", "-v", "true"])
     assert result.exit_code == 0
+
+
+@pytest.mark.parametrize('x_quant, y_quant, formula, expected_dim', [
+    (3 * UREG.meter, 4 * UREG.meter, 'x + y', UREG.meter),  # unit of addition result is meter
+    (3 * UREG.meter, 2 * UREG.second, 'x * y', UREG.meter * UREG.second),
+    # unit of multiplication result is meter*second
+    (10 * UREG.second, 2 * UREG.second, 'x / y', UREG.dimensionless),  # unit of division result is dimensionless
+    (5 * UREG.meter, 2 * UREG.meter, 'x * y', UREG.meter ** 2),  # unit of multiplication result is meter**2
+])
+def test_calculate_formula_dimension(formula, x_quant, y_quant, expected_dim):
+    result_dim = calculate_formula_dimension(formula, x_quant, y_quant, expected_dim)
+    assert result_dim == expected_dim
 
 
 def test_calculate_z():

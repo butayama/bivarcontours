@@ -41,17 +41,14 @@ import numexpr as ne
 import seaborn as sns
 import numpy as np
 from pint import UnitRegistry, UndefinedUnitError, DimensionalityError, UnitStrippedWarning
-from sympy import symbols, Matrix, Expr
+from sympy import symbols, Matrix
 from sympy.core import Float, sympify
 from sympy.tensor.array import ImmutableDenseNDimArray
-from sympy.abc import x, y
-from sympy.parsing.sympy_parser import parse_expr
 import sympy.physics.units as sympy_units
 import warnings
-from map_base_units import create_pint_quantity, pint_to_sympy_unit, create_sympy_quantity, sympy_to_pint_quantity
+from bivarcontours.unit_handling.map_base_units import (UnitQuantity, UREG, pint_to_sympy_unit, create_sympy_quantity,
+                                                        sympy_to_pint_quantity)
 
-ureg = UnitRegistry()
-Q_ = ureg.Quantity
 SIBASE = sympy_units.UnitSystem.get_unit_system("SI")._base_units
 color = sns.color_palette()
 FIGURE_SIZE = 10
@@ -63,7 +60,7 @@ SCALING_FACTOR = 10 ** SCALING_EXPONENT
 X, Y = symbols('X Y')
 
 
-def result_unit(parsed_formula, x_sym, y_sym, x_unit, y_unit):
+def result_unit_of_formula(parsed_formula, x_sym, y_sym, x_unit, y_unit):
     # substitute the symbols with their corresponding units
     base_x_units = sympy_units.util.convert_to(x_unit, SIBASE).n(2)
     base_y_units = sympy_units.util.convert_to(y_unit, SIBASE).n(2)
@@ -71,7 +68,7 @@ def result_unit(parsed_formula, x_sym, y_sym, x_unit, y_unit):
     # Create an expression in base units
     units_expr = parsed_formula.subs({x_sym: base_x_units, y_sym: base_y_units})
     # evaluate the units expression to get result
-    # units_result = ureg.parse_expression(str(units_expr))
+    # units_result = UREG.parse_expression(str(units_expr))
     return units_expr
 
 
@@ -110,7 +107,7 @@ def runtime_calculate_z(formula_, x_, y_, x_base, y_base, z_dim):
     :param x_base: base unit for x
     :param y_base: base unit for y
     :param z_dim: unit for the calculation result: string
-    :return: result_quant : numpy z array with ureg.Quantity
+    :return: result_quant : numpy z array with UREG.Quantity
     """
 
     # Substitute the base units into the symbolic formula
@@ -131,7 +128,7 @@ def runtime_calculate_z(formula_, x_, y_, x_base, y_base, z_dim):
 
     # Convert the result back to pint Quantity with the appropriate unit
     # expected_result_unit = result_unit(parsed_formula, x_sym, y_sym, sympy_x_base, sympy_y_base)
-    expected_result_unit_sympy = result_unit(parsed_formula, x_sym, y_sym, x_base, y_base)
+    expected_result_unit_sympy = result_unit_of_formula(parsed_formula, x_sym, y_sym, x_base, y_base)
     expected_result_unit = sympy_to_pint_quantity(expected_result_unit_sympy)
     # Validate the units during computation.
     # If expected_result_unit is a float, but it's supposed to be dimensionless,
@@ -152,9 +149,9 @@ def runtime_calculate_z(formula_, x_, y_, x_base, y_base, z_dim):
         result = None
 
         # Convert the result back to pint Quantity with the appropriate unit
-    result_quant = ureg.Quantity(result, expected_result_unit)
+    result_quant = UREG.Quantity(result, expected_result_unit)
     actual_dim = result_quant.dimensionality
-    expected_dim = ureg.parse_expression(z_dim).dimensionality
+    expected_dim = UREG.parse_expression(z_dim).dimensionality
     if actual_dim != expected_dim:
         raise DimensionalityError(actual_dim, expected_dim)
 
@@ -203,16 +200,8 @@ def calculate_z(formula_, x_, y_, z_dim):
     :return: z
     """
 
-    try:
-        x_base = x_.to_base_units()
-    except AttributeError as e:  # x has no attribute 'to_base_units'
-        x_base = Q_(x_, ureg.dimensionless)
-        x_base = x_.to_base_units()
-    try:
-        y_base = y_.to_base_units()
-    except AttributeError as e:  # y has no attribute 'to_base_units'
-        y_base = Q_(y_, ureg.dimensionless)
-        y_base = y_.to_base_units()
+    x_magnitude, x_base = is_dimensionless(x_)
+    y_magnitude, y_base = is_dimensionless(y_)
 
     # Substitute the base units into the symbolic formula
     x_sym, y_sym = symbols('x y')
@@ -228,14 +217,15 @@ def calculate_z(formula_, x_, y_, z_dim):
     # result = parsed_formula.evalf(subs={x_sym: x_base.magnitude, y_sym: y_base.magnitude})
     result = matrix_form.evalf()
 
-    sympy_x_unit = pint_to_sympy_unit(x_base.magnitude, x_base.units)
-    sympy_x_base = create_sympy_quantity(x_base.magnitude, sympy_x_unit)
+    sympy_x_unit = pint_to_sympy_unit(x_magnitude, x_base)
+    sympy_x_base = create_sympy_quantity(x_magnitude, sympy_x_unit)
 
-    sympy_y_unit = pint_to_sympy_unit(y_base.magnitude, y_base.units)
-    sympy_y_base = create_sympy_quantity(y_base.magnitude, sympy_y_unit)
+    sympy_y_unit = pint_to_sympy_unit(y_magnitude, y_base)
+    sympy_y_base = create_sympy_quantity(y_magnitude, sympy_y_unit)
 
     # Convert the result back to pint Quantity with the appropriate unit
-    expected_result_unit_sympy = result_unit(parsed_formula, x_sym, y_sym, sympy_x_base, sympy_y_base)
+    expected_result_unit_sympy = result_unit_of_formula(parsed_formula, x_sym, y_sym, sympy_x_base, sympy_y_base)
+    print(type(expected_result_unit_sympy))
     expected_result_unit = sympy_to_pint_quantity(expected_result_unit_sympy)
     # Validate the units during computation.
     # If expected_result_unit is a float, but it's supposed to be dimensionless,
@@ -244,10 +234,45 @@ def calculate_z(formula_, x_, y_, z_dim):
         # ToDo Why Float instead of Hz ??
         expected_result_unit = 'Hz'  # or 'dimensionless'
 
-    result_quant = ureg.Quantity(result, expected_result_unit)
-    if result_quant.dimensionality != ureg.parse_expression(z_dim).dimensionality:
-        raise DimensionalityError(result_quant.dimensionality, ureg.parse_expression(z_dim).dimensionality)
+    result_quant = UREG.Quantity(result, expected_result_unit)
+    if result_quant.dimensionality != UREG.parse_expression(z_dim).dimensionality:
+        raise DimensionalityError(result_quant.dimensionality, UREG.parse_expression(z_dim).dimensionality)
     return result_quant
+
+
+def calculate_formula_dimension(formula_, x_, y_, z_dim):
+    """
+    :param z_dim: unit fo the calculation result: string
+    :param formula_: f(x,y): string
+    :param x_:
+    :param y_:
+    :return: z
+    """
+
+    x_magnitude, x_base = is_dimensionless(x_)
+    y_magnitude, y_base = is_dimensionless(y_)
+
+    # Substitute the base units into the symbolic formula
+    x_sym, y_sym = symbols('x y')
+    sympy_x_base = create_sympy_quantity(x_magnitude, x_base)
+    sympy_y_base = create_sympy_quantity(y_magnitude, y_base)
+    parsed_formula = None
+    try:
+        parsed_formula = sympify(formula_)
+    except Exception as e:
+        raise ValueError("invalidFormula")
+
+    # Do the actual numerical calculation using magnitudes
+    unit_result = parsed_formula.subs({x_sym: sympy_x_base, y_sym: sympy_y_base})
+    return unit_result
+
+
+def is_dimensionless(value):
+    try:
+        base = value.to_base_units()
+    except AttributeError:
+        return value, ""
+    return value.magnitude, base
 
 
 class UnitError(Exception):
@@ -269,7 +294,7 @@ def unit_validation(dims):
     """
     for dim in dims:
         try:
-            test_quantity = Q_(1, dim)  # Creates a Quantity with magnitude 1 and the specified unit
+            test_quantity = UnitQuantity(1, dim)  # Creates a Quantity with magnitude 1 and the specified unit
         except UndefinedUnitError as e:
             raise UnitError(f"Dimension {dim} is not defined in the pint module") from e
 
@@ -306,9 +331,9 @@ def _set_correct_units_for_dimension(dimension, min_value, max_value, step_value
     :return: A tuple containing the minimum value, maximum value, and step value, all with the appropriate units
     based on the dimension provided.
     """
-    min_value_with_unit = Q_(min_value, dimension)
-    max_value_with_unit = Q_(max_value, dimension)
-    step_value_with_unit = Q_(step_value, dimension)
+    min_value_with_unit = UnitQuantity(min_value, dimension)
+    max_value_with_unit = UnitQuantity(max_value, dimension)
+    step_value_with_unit = UnitQuantity(step_value, dimension)
     return min_value_with_unit, max_value_with_unit, step_value_with_unit
 
 
@@ -489,14 +514,14 @@ class Contour:
 
         :return: None
         """
-        self.unity_res = Q_(1, self.dim_res)
+        self.unity_res = UnitQuantity(1, self.dim_res)
 
         self.initialize_dimension_one_values()
         self.initialize_dimension_two_values()
 
         # Test, if dim_res fits to the formula result with the given input dimensions dim_1 and dim_2
-        d1 = Q_(1, self.dim_1)
-        d2 = Q_(1, self.dim_2)
+        d1 = UnitQuantity(1, self.dim_1)
+        d2 = UnitQuantity(1, self.dim_2)
         res = calculate_z(self.formula, d1, d2, self.dim_res)
         try:
             if res.dimensionality != self.unity_res.dimensionality:
@@ -558,8 +583,8 @@ class Contour:
                                             self.y_log)
 
         #  use Pint's Quantity object to wrap the numpy.ndarray
-        self.x_values = Q_(self.x_np_values, self.base_unit_1)
-        self.y_values = Q_(self.y_np_values, self.base_unit_2)
+        self.x_values = UnitQuantity(self.x_np_values, self.base_unit_1)
+        self.y_values = UnitQuantity(self.y_np_values, self.base_unit_2)
 
     def filename_for_saved_contour_figure(self):
         """
@@ -763,8 +788,8 @@ def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_di
         f"x_start {x_start}, x_stop {x_stop}, x_step {x_step}, x_dim {x_dim}, y_start {y_start}, y_stop {y_stop}, "
         f"y_step {y_step}, y_dim {y_dim}, nstep_x {nstep_x}, nstep_y {nstep_y}, x_log {x_log}, y_log {y_log},"
         f"swap_axes {swap_axes}, verbose {verbose}")
-    label_x_dimension = Q_(1, x_dim).units
-    label_y_dimension = Q_(1, y_dim).units
+    label_x_dimension = UnitQuantity(1, x_dim).units
+    label_y_dimension = UnitQuantity(1, y_dim).units
     x_label = f"{x_label} [{label_x_dimension:~P}]"
     y_label = f"{y_label} [{label_y_dimension:~P}]"
     c_c = Contour(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_start, y_stop, y_step,

@@ -1,6 +1,6 @@
 import pytest
-from bivarcontours.map_base_units import (pint_to_sympy_unit, sympy_to_pint_quantity,
-                                          unit_mapping_pint_sympy, create_sympy_quantity)
+from bivarcontours.unit_handling.map_base_units import (pint_to_sympy_unit, sympy_to_pint_quantity,
+                                                        unit_mapping_pint_sympy, create_sympy_quantity)
 
 pytestmark = pytest.mark.unit
 

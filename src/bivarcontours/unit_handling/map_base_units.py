@@ -1,8 +1,9 @@
 from pint import UnitRegistry
-from sympy import sympify
+from sympy import Float, Integer
 from sympy.physics.units import meter, second, ampere, candela, kilogram, mole, kelvin, radian
-
 UREG = UnitRegistry()
+UnitQuantity = UREG.Quantity
+
 unit_mapping_pint_sympy = {
     UREG.meter: meter,  # length
     UREG.second: second,  # time
@@ -32,17 +33,20 @@ def create_pint_quantity(value, unit):
 
 def pint_to_sympy_unit(value, pint_unit):
     pint_quantity = create_pint_quantity(value, pint_unit)
+    if str(pint_quantity.units) == 'dimensionless':
+        return 1
+    else:
+        sympy_unit = unit_mapping_pint_sympy[pint_quantity.units]
+    return sympy_unit
 
-    # Ensure you're getting the pint units (not value)
-    return unit_mapping_pint_sympy[pint_quantity.units]
 
-
-def create_sympy_quantity(value, sympy_unit):
-    return value * sympy_unit
+def create_sympy_quantity(magnitude, unit):
+    return magnitude * unit
 
 
 def sympy_to_pint_quantity(sympy_quantity):
-    if isinstance(sympy_quantity, (int, float)):  # handle primitive types
+    print(type(sympy_quantity))
+    if isinstance(sympy_quantity, (int, float, Float, Integer)):  # handle primitive types
         return create_pint_quantity(sympy_quantity, 'dimensionless')
 
     value, sympy_unit = sympy_quantity.args
