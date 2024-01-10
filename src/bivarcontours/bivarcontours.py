@@ -276,6 +276,7 @@ def is_dimensionless(value):
 
 
 class UnitError(Exception):
+    # ToDo import from Package result_unit
     """Exception raised for errors in the input unit."""
 
     def __init__(self, message="Invalid unit"):
