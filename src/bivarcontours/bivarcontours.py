@@ -297,7 +297,7 @@ def unit_validation(dims):
             test_quantity = UnitQuantity(1, dim)  # Creates a Quantity with magnitude 1 and the specified unit
         except UndefinedUnitError as e:
             raise UnitError(f"Dimension {dim} is not defined in the pint module") from e
-
+        print(f"{dim} = {test_quantity} is validated as defined in the `pint` module")
 
 def _convert_units_to_dimensionless_and_get_interval(min_value, max_value, step_value, num):
     """

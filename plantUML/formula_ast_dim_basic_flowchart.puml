@@ -1,0 +1,32 @@
+@startuml
+title Formula AST Dimension Flowchart
+
+start
+
+:parse formula to AST tree;
+:Iteratively visit tree nodes;
+
+while (Stack not empty)
+  :Pop node from stack;
+
+  if (Node is Name)
+    :Retrieve dimension;
+    :Append dimension to output;
+  else if (Node is BinOp)
+    if (Node visited)
+      :Pop right and left dimensions from output;
+      :Perform operation on dimensions depending on operator;
+      :Append result to output;
+    else
+      :Push node back to stack;
+      :Push right and left nodes to stack;
+    endif
+  else
+    :Skip node;
+  endif
+endwhile
+
+:Return result dimension;
+stop
+
+@enduml

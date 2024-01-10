@@ -15,24 +15,7 @@ These rules must be interpreted along with the correct mathematical order of ope
 
 import ast
 
-from pint import UndefinedUnitError
-
-from bivarcontours.unit_handling.map_base_units import (UnitQuantity, UREG)
-from bivarcontours.bivarcontours import unit_validation, UnitError
-import sympy
-
-symbol_dict = {}
 DIMENSIONS = {'x': 'm', 'y': 'm'}
-
-
-def create_symbol(symbol_dict, symbol_name):
-    if symbol_name not in symbol_dict:
-        try:
-            test_quantity = UnitQuantity(1, symbol_name)  # Creates a Quantity with magnitude 1 and the specified unit
-        except UndefinedUnitError as e:
-            raise UnitError(f"Dimension {symbol_name} is not defined in the pint module") from e
-        print(f"{symbol_name} = {test_quantity} is validated as defined in the `pint` module")
-        symbol_dict[symbol_name] = sympy.symbols(symbol_name)
 
 
 def visit_node(node, indent=''):
@@ -61,9 +44,7 @@ def post_order(formula):
         elif isinstance(node, ast.BinOp):
             if visit:
                 right_dim = out.pop()
-                create_symbol(symbol_dict, right_dim)
                 left_dim = out.pop()
-                create_symbol(symbol_dict, left_dim)
                 if isinstance(node.op, ast.Mult):
                     result_dim = left_dim + '*' + right_dim
                 elif isinstance(node.op, ast.Add) or isinstance(node.op, ast.Sub):
@@ -84,11 +65,6 @@ def post_order(formula):
 def main(formula):
     r_dim = post_order(formula)
     print(f"r_dim = {r_dim if r_dim else 'None'}")
-
-    # Convert the string to a symbolic expression using the mapping
-    base_dim = sympy.sympify(r_dim, locals=symbol_dict)
-    print(f" base_dim = {base_dim}")
-
 
 if __name__ == '__main__':
     main("x * y / (x + y)")
