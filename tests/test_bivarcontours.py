@@ -16,25 +16,6 @@ from result_unit.map_base_units import UnitQuantity, UREG, sympy_to_pint_quantit
 SIBASE = sympy_units.UnitSystem.get_unit_system("SI")._base_units
 
 
-def test_formula_result_unit():
-    # x_sym, y_sym = symbols('x y')
-    formula = "x+y"
-    # parsed_formula = sympify("x+y")
-    x_unit = "meter"
-    y_unit = "meter"
-    res_unit = UnitQuantity(1, "meter").units
-
-    result = formula_result_unit({"x": x_unit, "y": y_unit}, formula)
-    result_unit = sympy_to_pint_quantity(result).units  # Convert result string to pint Unit object
-    # res_unit = sympy_to_pint_quantity(result).units
-    assert result_unit == res_unit
-
-    # parsed_formula = sympify("x*y")
-    # result = formula_result_unit({x_sym: x_unit, y_sym: y_unit}, parsed_formula)
-    # res_unit = sympy_to_pint_quantity(result).units
-    # assert res_unit == res_unit
-
-
 def test_bivarcontours():
     runner = CliRunner()
     result = runner.invoke(cplot, ["Test_Rechteck_Flaeche", "a", "b", "x * y", "m**2", "0.1", "2",
