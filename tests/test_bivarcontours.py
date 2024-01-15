@@ -5,34 +5,15 @@ Python files in bivarcontours/tests/
 are found without needing to attempt relative import.
 """
 
-from bivarcontours.bivarcontours import (cplot, calculate_z, calculate_formula_dimension, unit_validation, Contour,
-                                         UnitError, result_unit_of_formula)
+from bivarcontours.bivarcontours import (cplot, calculate_z, calculate_formula_dimension, unit_validation, Contour)
 from click.testing import CliRunner
-import pytest
-from pint import UndefinedUnitError, DimensionalityError
+from pytest import raises, mark
+from pint import DimensionalityError
 from sympy import symbols, sympify
 import sympy.physics.units as sympy_units
-from pint import UnitRegistry
-
+from result_unit.result_unit import formula_result_unit, UnitError
+from result_unit.map_base_units import UnitQuantity, UREG, sympy_to_pint_quantity
 SIBASE = sympy_units.UnitSystem.get_unit_system("SI")._base_units
-from bivarcontours.unit_handling.map_base_units import UnitQuantity, UREG, sympy_to_pint_quantity
-
-
-def test_result_unit_of_formula():
-    x_sym, y_sym = symbols('x y')
-    parsed_formula = sympify("x+y")
-    x_unit = "meter"
-    y_unit = "meter"
-    res_unit = UnitQuantity(1, "meter").units
-
-    result = result_unit_of_formula(parsed_formula, x_sym, y_sym, x_unit, y_unit)
-    res_unit = sympy_to_pint_quantity(result).units
-    assert res_unit == res_unit
-
-    parsed_formula = sympify("x*y")
-    result = result_unit_of_formula(parsed_formula, x_sym, y_sym, x_unit, y_unit)
-    res_unit = sympy_to_pint_quantity(result).units
-    assert res_unit == res_unit
 
 
 def test_bivarcontours():
@@ -42,7 +23,7 @@ def test_bivarcontours():
     assert result.exit_code == 0
 
 
-@pytest.mark.parametrize('x_quant, y_quant, formula, expected_dim', [
+@mark.parametrize('x_quant, y_quant, formula, expected_dim', [
     (3 * UREG.meter, 4 * UREG.meter, 'x + y', UREG.meter),  # unit of addition result is meter
     (3 * UREG.meter, 2 * UREG.second, 'x * y', UREG.meter * UREG.second),
     # unit of multiplication result is meter*second
@@ -56,13 +37,13 @@ def test_calculate_formula_dimension(formula, x_quant, y_quant, expected_dim):
 
 def test_calculate_z():
     assert calculate_z('x + y', 5, 7, '') == 12
-    with pytest.raises(ZeroDivisionError):
+    with raises(ZeroDivisionError):
         calculate_z('x / y', 5, 0, '')
 
 
 def test_unit_validation():
     unit_validation(['pound', 'inch'])
-    with pytest.raises(UnitError):
+    with raises(UnitError):
         unit_validation(['bogus1', 'bogus2'])
 
 
@@ -73,7 +54,7 @@ def test_contour_init():
     assert isinstance(contour, Contour)
 
     # Test invalid dimensions
-    with pytest.raises(UnitError):
+    with raises(UnitError):
         contour = Contour('title', 'label_1', 'label_2', 'x + y', 'bogus_dim',
                           1, 2, 0.1, 'week', 3, 4, 0.2, 'mile', 'false')
 
@@ -81,14 +62,14 @@ def test_contour_init():
 def test_contour_formula_dimensionality_dim_1_dim_2():
     contour = Contour('title', 'label_1', 'label_2', 'x + y', 'inch',
                       1, 2, 0.1, 'week', 3, 4, 0.2, 'mile', 'false')
-    with pytest.raises(DimensionalityError):
+    with raises(DimensionalityError):
         contour.initialize_values()
 
 
 def test_contour_formula_dimensionality_dim_res():
     contour = Contour('title', 'label_1', 'label_2', 'x + y', 'day',
                       1, 2, 0.1, 'week', 3, 4, 0.2, 'm', 'false')
-    with pytest.raises(DimensionalityError):
+    with raises(DimensionalityError):
         contour.initialize_values()
 
 

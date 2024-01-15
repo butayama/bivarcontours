@@ -21,6 +21,7 @@ pytest = "^7.4.3"
 mpld3 = "^0.5.10"
 sympy = "^1.12"
 numexpr = "^2.8.8"
+result_unit = {path = "../result_unit"}
 
 [tool.poetry.dev-dependencies]
 

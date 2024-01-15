@@ -46,8 +46,8 @@ from sympy.core import Float, sympify
 from sympy.tensor.array import ImmutableDenseNDimArray
 import sympy.physics.units as sympy_units
 import warnings
-from bivarcontours.unit_handling.map_base_units import (UnitQuantity, UREG, pint_to_sympy_unit, create_sympy_quantity,
-                                                        sympy_to_pint_quantity)
+from result_unit.map_base_units import (UnitQuantity, UREG, pint_to_sympy_unit, create_sympy_quantity,
+                                        sympy_to_pint_quantity)
 from result_unit import *
 
 SIBASE = sympy_units.UnitSystem.get_unit_system("SI")._base_units
@@ -300,6 +300,7 @@ def unit_validation(dims):
         except UndefinedUnitError as e:
             raise UnitError(f"Dimension {dim} is not defined in the pint module") from e
         print(f"{dim} = {test_quantity} is validated as defined in the `pint` module")
+
 
 def _convert_units_to_dimensionless_and_get_interval(min_value, max_value, step_value, num):
     """
