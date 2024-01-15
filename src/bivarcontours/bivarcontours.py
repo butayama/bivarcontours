@@ -34,6 +34,7 @@ incorrect data types are passed.
     with the np.arange function. The same goes for min_2 and max_2.
 """
 
+import re
 import click
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter, NullFormatter
@@ -48,7 +49,8 @@ import sympy.physics.units as sympy_units
 import warnings
 from result_unit.map_base_units import (UnitQuantity, UREG, pint_to_sympy_unit, create_sympy_quantity,
                                         sympy_to_pint_quantity)
-from result_unit import *
+# from result_unit.result_unit import UnitError
+from result_unit.result_unit import *
 
 SIBASE = sympy_units.UnitSystem.get_unit_system("SI")._base_units
 color = sns.color_palette()
@@ -276,13 +278,13 @@ def is_dimensionless(value):
     return value.magnitude, base
 
 
-class UnitError(Exception):
-    # ToDo import from Package result_unit
+class ValidFilenameError(Exception):
     """Exception raised for errors in the input unit."""
 
     def __init__(self, message="Invalid unit"):
         self.message = message
         super().__init__(self.message)
+
 
 
 def unit_validation(dims):
@@ -364,6 +366,22 @@ def _generate_values(start, stop, step_interval, nstep, log):
         return np.linspace(start, stop, int(step_interval))
     else:
         return np.arange(start, stop, step=step_interval)
+
+
+def _is_valid_filename(filename: str):
+    # pattern to match valid filenames in Linux/Unix or Windows
+    pattern = r'^[^\\/:*?"<>|@\s]+$'
+
+    # check if filename is not blank and matches the pattern
+    return bool(filename) and re.match(pattern, filename) is not None
+
+
+def _sanitize_filename(filename: str) -> str:
+    # pattern to match valid filenames in Linux/Unix or Windows
+    pattern = r'[^\w\.]'
+
+    # Replace invalid characters with '_'
+    return re.sub(pattern, '_', filename)
 
 
 class Contour:
@@ -601,8 +619,17 @@ class Contour:
         else:
             dim_res = self.dim_res
 
-        self.filename = (
-            f'F_{self.title}_{dim_res}_X_{self.dim_1}_{self.x_values[0].magnitude:.2f}-{self.x_values[-1].magnitude:.2f}_Y_{self.dim_2}_{(self.y_values[0].magnitude):.2f}-{(self.y_values[-1].magnitude):.2f}.png')
+        filename = (f'F_{self.title}_{dim_res}_X_{self.dim_1}_{self.x_values[0].magnitude:.2f}-'
+                    f'{self.x_values[-1].magnitude:.2f}_Y_{self.dim_2}_{self.y_values[0].magnitude :.2f}-'
+                    f'{self.y_values[-1].magnitude :.2f}.png')
+        if _is_valid_filename(filename):
+            self.filename = filename
+        else:
+            print(f'invalid filename: {filename}')
+            self.filename = _sanitize_filename(filename)
+            # ToDo User Input Y/N or edit recommended filename
+            # Todo Create a file_handling package (see jython music...) and import into bivarcontours
+            print(f'chosen filename: {self.filename}')
 
     def compute_values(self):
         """

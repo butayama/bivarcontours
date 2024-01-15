@@ -4,16 +4,55 @@ Run all tests with:
 Python files in bivarcontours/tests/
 are found without needing to attempt relative import.
 """
-
-from bivarcontours.bivarcontours import (cplot, calculate_z, calculate_formula_dimension, unit_validation, Contour)
+import pytest
+from bivarcontours.bivarcontours import (cplot, calculate_z, calculate_formula_dimension, unit_validation, Contour,
+                                         _is_valid_filename, _sanitize_filename)
 from click.testing import CliRunner
-from pytest import raises, mark
 from pint import DimensionalityError
 from sympy import symbols, sympify
 import sympy.physics.units as sympy_units
 from result_unit.result_unit import formula_result_unit, UnitError
 from result_unit.map_base_units import UnitQuantity, UREG, sympy_to_pint_quantity
 SIBASE = sympy_units.UnitSystem.get_unit_system("SI")._base_units
+from unittest.mock import MagicMock, patch
+
+
+@pytest.mark.parametrize("filename,expected",
+    [
+        ("validfilename.png", True),
+        ("invalid/filename.png", False),
+        ("valid_filename.png", True),
+        ("/invalid_filename.png", False),
+        ("file/name.png", False),
+        ("file@name.png", False),
+        ("file name.png", False),
+        ("/invalid/name/", False),
+        ("^validfil?e'name.png", False),
+        ("invalid/filename.png", False),
+        ("/invalid[x]filename<y>.png", False),
+        ("filename_with_special_chars@.png", False),
+        ("filename_with_special_chars*.png", False),
+    ]
+)
+def test_is_valid_filename(filename, expected):
+    assert _is_valid_filename(filename) == expected
+
+
+@pytest.mark.parametrize("filename,expected_output",
+    [
+        ("file/name.png", "file_name.png"),
+        ("file@name.png", "file_name.png"),
+        ("file name.png", "file_name.png"),
+        ("/invalid/name/", "_invalid_name_"),
+        ("^validfil?e'name.png", "_validfil_e_name.png"),
+        ("invalid/filename.png", "invalid_filename.png"),
+        ("/invalid[x]filename<y>.png", "_invalid_x_filename_y_.png"),
+        ("filename_with_special_chars@.png", "filename_with_special_chars_.png"),
+        ("filename_with_special_chars*.png", "filename_with_special_chars_.png"),
+    ]
+)
+def test_sanitize_filename(filename,expected_output):
+        assert _sanitize_filename(filename) == expected_output
 
 
 def test_bivarcontours():
@@ -23,7 +62,7 @@ def test_bivarcontours():
     assert result.exit_code == 0
 
 
-@mark.parametrize('x_quant, y_quant, formula, expected_dim', [
+@pytest.mark.parametrize('x_quant, y_quant, formula, expected_dim', [
     (3 * UREG.meter, 4 * UREG.meter, 'x + y', UREG.meter),  # unit of addition result is meter
     (3 * UREG.meter, 2 * UREG.second, 'x * y', UREG.meter * UREG.second),
     # unit of multiplication result is meter*second
