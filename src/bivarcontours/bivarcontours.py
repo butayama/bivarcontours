@@ -43,7 +43,7 @@ import seaborn as sns
 import numpy as np
 from pint import DimensionalityError, UnitStrippedWarning
 from sympy import symbols, Matrix, S, Mul, Eq
-from sympy.physics.units import length, speed
+from sympy.physics.units import Quantity, length, speed
 from sympy.physics.units.definitions import meter
 from sympy.physics.units.systems.si import dimsys_SI
 from sympy.core import Float, sympify
@@ -261,6 +261,11 @@ def convert_pint_quantity_to_fundamental_unit(n_quantity):
     return fundamental_unit
 
 
+def sympy_result_to_pint_quantity(expr):
+    return expr.subs({x: 1 for x in expr.args if not x.has(Quantity)})
+
+
+
 def quantity_to_sympy(magnitude, units):
     magnitude = S(magnitude)  # Convert magnitude to SymPy number
     unit = S(units)  # Convert units to SymPy entity
@@ -294,8 +299,13 @@ def calculate_formula_dimension(formula_, x_, y_):
     except Exception as e:
         raise ValueError("invalidFormula: ", e)
 
-    # Do the actual numerical calculation using magnitudes
-    unit_result = parsed_formula.subs({x_sym: sympy_x_base, y_sym: sympy_y_base})
+    # Retrieve the product of symbols
+    # https://stackoverflow.com/questions/51119918/how-to-concisely-get-the-units-of-a-sympy-expression?rq=3
+    # unit_result = parsed_formula.as_coeff_Mul()
+    unit_result = sympy_result_to_pint_quantity(parsed_formula)
+    print(parsed_formula, unit_result)
+
+    # unit_result = parsed_formula.subs({x_sym: sympy_x_base, y_sym: sympy_y_base})
     print(parsed_formula, unit_result, ureg(unit_result))
     return unit_result
 
