@@ -57,7 +57,7 @@ def test_sanitize_filename(filename,expected_output):
 
 def test_bivarcontours():
     runner = CliRunner()
-    result = runner.invoke(cplot, ["a_add_b" "X" "Y" "x + y" "m" "10" "1000" "20" "cm" "0.1" "15" "20" "m" "-nx" "-ny" "-v"])
+    result = runner.invoke(cplot, ["a_add_b" "X" "Y" "x + y" "mm" "10" "15" "20" "cm" "10" "15" "20" "cm" "-nx" "-ny" "-v"])
     assert result.exit_code == 0
 
 

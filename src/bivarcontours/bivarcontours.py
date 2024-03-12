@@ -1,7 +1,7 @@
 """
 function-contour-dimensioning-diagram.py
 
-Crate a dimensioning diagram for the dependent variable z of an arbitrary function
+Create a dimensioning diagram for the dependent variable z of an arbitrary function
 with two independent variables x and y.
 
 MIT License
@@ -41,7 +41,7 @@ from matplotlib.ticker import ScalarFormatter, NullFormatter
 import numexpr as ne
 import seaborn as sns
 import numpy as np
-from pint import UnitRegistry, UndefinedUnitError, DimensionalityError, UnitStrippedWarning
+from pint import DimensionalityError, UnitStrippedWarning
 from sympy import symbols, Matrix
 from sympy.core import Float, sympify
 from sympy.tensor.array import ImmutableDenseNDimArray
@@ -52,6 +52,7 @@ from result_unit.map_base_units import (UnitQuantity, UREG, pint_to_sympy_unit, 
 # from result_unit.result_unit import UnitError
 from result_unit.result_unit import *
 
+# ToDo Find out methods to access `SI_system._base_units` information without accessing _base_units directly
 SIBASE = sympy_units.UnitSystem.get_unit_system("SI")._base_units
 color = sns.color_palette()
 FIGURE_SIZE = 10
@@ -263,7 +264,7 @@ def calculate_formula_dimension(formula_, x_, y_, z_dim):
     try:
         parsed_formula = sympify(formula_)
     except Exception as e:
-        raise ValueError("invalidFormula")
+        raise ValueError("invalidFormula: ", e)
 
     # Do the actual numerical calculation using magnitudes
     unit_result = parsed_formula.subs({x_sym: sympy_x_base, y_sym: sympy_y_base})
@@ -284,7 +285,6 @@ class ValidFilenameError(Exception):
     def __init__(self, message="Invalid unit"):
         self.message = message
         super().__init__(self.message)
-
 
 
 def unit_validation(dims):
@@ -393,7 +393,7 @@ class Contour:
     - title (str): The title of the contour plot
     - label_1 (str): The label for the first dimension
     - label_2 (str): The label for the second dimension
-    - formula (str): The formula used to calculate the contour values
+    - formula_ (str): The formula used to calculate the contour values
     - dim_res (str): The dimensional resolution of the contour plot
     - min_1 (float): The minimum value for the first dimension
     - max_1 (float): The maximum value for the first dimension
@@ -411,29 +411,33 @@ class Contour:
     - verbose (bool): Indicates whether to include verbose output during computation
 
     Methods:
-    - __init__(self, title, label_1, label_2, formula, dim_res, min_1, max_1, step_1, dim_1, min_2, max_2, step_2, dim_2, swap_axes, verbose=False): Initializes a Contour object with the given parameters.
+    - __init__(self, title, label_1, label_2, formula_, dim_res, min_1, max_1, step_1, dim_1, min_2, max_2, step_2,
+      dim_2, swap_axes, verbose=False): Initializes a Contour object with the given parameters.
     - initialize_swapping_axes(self, dim_1, dim_2): Initializes the values for swapping the axes if necessary.
     - initialize_values(self): Initializes all necessary values for generating the contour plot.
     - initialize_dimension_one_values(self): Initializes the values for the first dimension.
     - initialize_dimension_two_values(self): Initializes the values for the second dimension.
-    - _set_correct_units_for_dimension(self, dimension, min_value, max_value, step_value): Sets the correct units for a given dimension.
-    - _convert_units_to_dimensionless_and_get_interval(self, min_value, max_value, step_value): Converts the units to dimensionless and returns the interval.
+    - _set_correct_units_for_dimension(self, dimension, min_value, max_value, step_value): Sets the correct units for a
+      given dimension.
+    - _convert_units_to_dimensionless_and_get_interval(self, min_value, max_value, step_value): Converts the units to
+      dimensionless and returns the interval.
     - initialize_diagram_labels(self): Initializes the labels for the contour plot diagram.
-    - set_values_for_contour_calc_with_scalars_scaled_to_base_units(self): Sets the values for calculating the contour with scaled base units.
+    - set_values_for_contour_calc_with_scalars_scaled_to_base_units(self): Sets the values for calculating the contour
+      with scaled base units.
     - filename_for_saved_contour_figure(self): Generates the filename for saving the contour figure.
     - compute_values(self): Computes the contour values based on the given formula and dimension values.
     - Check_ticks_in_range(self, ax): Checks if the ticks are within the range of the contour plot.
 
     """
 
-    def __init__(self, title, label_1, label_2, formula, dim_res, min_1, max_1, step_1, dim_1, min_2, max_2, step_2,
+    def __init__(self, title, label_1, label_2, formula_, dim_res, min_1, max_1, step_1, dim_1, min_2, max_2, step_2,
                  dim_2, nstep_x, nstep_y, x_log, y_log, swap_axes, verbose):
 
         # type checks
         assert isinstance(title, str), "title should be a string"
         assert isinstance(label_1, str), "label_1 should be a string"
         assert isinstance(label_2, str), "label_2 should be a string"
-        assert isinstance(formula, str), "formula should be a string"
+        assert isinstance(formula_, str), "formula_ should be a string"
         assert isinstance(min_1, (int, float)), "min_1 should be a number"
         assert isinstance(max_1, (int, float)), "max_1 should be a number"
         assert isinstance(step_1, (int, float)), "step_1 should be a number"
@@ -479,32 +483,13 @@ class Contour:
         self.start_1 = None
         self.unity_res = None
         self.title = title
-        self.formula = formula
+        self.formula_ = formula_
         self.dim_res = dim_res
         self.nstep_x = nstep_x
         self.nstep_y = nstep_y
         self.x_log = x_log
         self.y_log = y_log
         self.swap_axes = swap_axes
-        self.initialize_swapping_axes(label_1, label_2, min_1, max_1, step_1, dim_1, min_2, max_2, step_2, dim_2)
-        self.verbose = verbose
-
-    def initialize_swapping_axes(self, label_1, label_2, min_1, max_1, step_1, dim_1, min_2, max_2, step_2, dim_2):
-        """
-        This method initializes the swapping of axes.
-
-        :param label_1:
-        :param label_2:
-        :param min_1:
-        :param max_1:
-        :param step_1:
-        :param dim_1: The first dimension to be swapped.
-        :param min_2:
-        :param max_2:
-        :param step_2:
-        :param dim_2: The second dimension to be swapped.
-        :return: None
-        """
 
         if self.swap_axes:
             self.label_1 = label_2
@@ -529,6 +514,27 @@ class Contour:
             self.step_2 = step_2
             self.dim_2 = dim_2
 
+        self.verbose = verbose
+
+    def initialize_swapping_axes(self, label_1, label_2, min_1, max_1, step_1, dim_1, min_2, max_2, step_2, dim_2):
+        """
+        This method initializes the swapping of axes.
+
+        :param label_1:
+        :param label_2:
+        :param min_1:
+        :param max_1:
+        :param step_1:
+        :param dim_1: The first dimension to be swapped.
+        :param min_2:
+        :param max_2:
+        :param step_2:
+        :param dim_2: The second dimension to be swapped.
+        :return: None
+        """
+
+
+
     def initialize_values(self):
         """
         Initializes the values required for the calculation and plotting of contours.
@@ -543,7 +549,7 @@ class Contour:
         # Test, if dim_res fits to the formula result with the given input dimensions dim_1 and dim_2
         d1 = UnitQuantity(1, self.dim_1)
         d2 = UnitQuantity(1, self.dim_2)
-        res = calculate_z(self.formula, d1, d2, self.dim_res)
+        res = calculate_z(self.formula_, d1, d2, self.dim_res)
         try:
             if res.dimensionality != self.unity_res.dimensionality:
                 raise UnitError(f"Dimension of calculation result {res.dimensionality} does not match the given result"
@@ -620,8 +626,8 @@ class Contour:
             dim_res = self.dim_res
 
         filename = (f'F_{self.title}_{dim_res}_X_{self.dim_1}_{self.x_values[0].magnitude:.2f}-'
-                    f'{self.x_values[-1].magnitude:.2f}_Y_{self.dim_2}_{self.y_values[0].magnitude :.2f}-'
-                    f'{self.y_values[-1].magnitude :.2f}.png')
+                    f'{self.x_values[-1].magnitude:.2f}_Y_{self.dim_2}_{self.y_values[0].magnitude:.2f}-'
+                    f'{self.y_values[-1].magnitude:.2f}.png')
         if _is_valid_filename(filename):
             self.filename = filename
         else:
@@ -644,11 +650,11 @@ class Contour:
 
         # calculate corresponding Z values
         # calculate contour values
-        self.vals = runtime_calculate_z(self.formula, self.np_X, self.np_Y,
+        self.vals = runtime_calculate_z(self.formula_, self.np_X, self.np_Y,
                                         self.base_unit_1, self.base_unit_2, self.dim_res)
 
         # generate contour labels
-        self.hl = runtime_calculate_z(self.formula, self.np_X, self.np_Y,
+        self.hl = runtime_calculate_z(self.formula_, self.np_X, self.np_Y,
                                       self.base_unit_1, self.base_unit_2, self.dim_res)
 
     def check_ticks_in_range(self, ax, tick_x_values, tick_y_values):
@@ -726,7 +732,7 @@ class Contour:
             print('yticklabels = ', [f'{tick.to(self.dim_2):~P.2f}' for tick in yticks_with_unit])
 
     def set_labels_and_title(self, dia):
-        dia.set_title(f"{self.formula} [{self.unity_res.units:~P}]", fontsize=14, fontweight='bold')
+        dia.set_title(f"{self.formula_} [{self.unity_res.units:~P}]", fontsize=14, fontweight='bold')
         dia.set_xlabel(self.label_x, fontsize=14, fontweight='bold')
         dia.set_ylabel(self.label_y, fontsize=14, fontweight='bold')
         plt.xticks(rotation=70)
@@ -737,7 +743,6 @@ class Contour:
         hl_with_unit = self.vals
         scaled_hl_with_unit = self.vals.to(self.dim_res)
         hl_scale_factor = hl_with_unit[0, 0].magnitude / scaled_hl_with_unit[0, 0].magnitude
-        # self.hl = dia.contour(self.X.magnitude, self.Y.magnitude, self.vals.magnitude / hl_scale_factor, 35, zorder=0, colors='black')
         self.hl = dia.contour(self.X.magnitude, self.Y.magnitude, self.vals.magnitude, 35, zorder=0, colors='black')
         plt.clabel(self.hl, inline=1, fontsize=12, fmt=lambda x: f"{x:.2g}")
 
@@ -787,14 +792,14 @@ class Contour:
               is_flag=True)
 @click.option('--swap_axes', '-s', default=False, help='swap x- and y-axes', is_flag=True)
 @click.option('--verbose', '-v', default=False, help='print verbose information on screen', is_flag=True)
-def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_start, y_stop, y_step, y_dim,
+def cplot(title, x_label, y_label, equation, z_dim, x_start, x_stop, x_step, x_dim, y_start, y_stop, y_step, y_dim,
           nstep_x, nstep_y, x_log, y_log, swap_axes, verbose):
     """
 
     :param title: The title of the contour plot
     :param x_label: The label of the x-axis
     :param y_label: The label of the y-axis
-    :param formula: The mathematical formula used to generate the contour plot
+    :param equation: The mathematical equation used to generate the contour plot
     :param z_dim: The dimension of the z-axis
     :param x_start: The starting value of the x-axis
     :param x_stop: The stopping value of the x-axis
@@ -814,7 +819,7 @@ def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_di
 
     """
     click.echo(
-        f"Running --cplot with title {title}, x_label {x_label}, y_label {y_label}, formula {formula}, "
+        f"Running --cplot with title {title}, x_label {x_label}, y_label {y_label}, equation {equation}, "
         f"x_start {x_start}, x_stop {x_stop}, x_step {x_step}, x_dim {x_dim}, y_start {y_start}, y_stop {y_stop}, "
         f"y_step {y_step}, y_dim {y_dim}, nstep_x {nstep_x}, nstep_y {nstep_y}, x_log {x_log}, y_log {y_log},"
         f"swap_axes {swap_axes}, verbose {verbose}")
@@ -822,7 +827,7 @@ def cplot(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_di
     label_y_dimension = UnitQuantity(1, y_dim).units
     x_label = f"{x_label} [{label_x_dimension:~P}]"
     y_label = f"{y_label} [{label_y_dimension:~P}]"
-    c_c = Contour(title, x_label, y_label, formula, z_dim, x_start, x_stop, x_step, x_dim, y_start, y_stop, y_step,
+    c_c = Contour(title, x_label, y_label, equation, z_dim, x_start, x_stop, x_step, x_dim, y_start, y_stop, y_step,
                   y_dim, nstep_x, nstep_y, x_log, y_log, swap_axes, verbose)
     c_c.run()
 
