@@ -42,7 +42,10 @@ import numexpr as ne
 import seaborn as sns
 import numpy as np
 from pint import DimensionalityError, UnitStrippedWarning
-from sympy import symbols, Matrix, S, Mul
+from sympy import symbols, Matrix, S, Mul, Eq
+from sympy.physics.units import length, speed
+from sympy.physics.units.definitions import meter
+from sympy.physics.units.systems.si import dimsys_SI
 from sympy.core import Float, sympify
 from sympy.tensor.array import ImmutableDenseNDimArray
 import sympy.physics.units as sympy_units
@@ -293,7 +296,7 @@ def calculate_formula_dimension(formula_, x_, y_):
 
     # Do the actual numerical calculation using magnitudes
     unit_result = parsed_formula.subs({x_sym: sympy_x_base, y_sym: sympy_y_base})
-    print(parsed_formula, unit_result)
+    print(parsed_formula, unit_result, ureg(unit_result))
     return unit_result
 
 
