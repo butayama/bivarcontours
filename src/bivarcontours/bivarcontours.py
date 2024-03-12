@@ -42,7 +42,7 @@ import numexpr as ne
 import seaborn as sns
 import numpy as np
 from pint import DimensionalityError, UnitStrippedWarning
-from sympy import symbols, Matrix
+from sympy import symbols, Matrix, S, Mul
 from sympy.core import Float, sympify
 from sympy.tensor.array import ImmutableDenseNDimArray
 import sympy.physics.units as sympy_units
@@ -102,7 +102,7 @@ def runtime_calculate_z(formula_, x_, y_, x_base, y_base, z_dim):
     - Using try/except blocks to catch and handle any resulting exceptions.
     - Putting a timeout limit on calculations to prevent your service from hanging on extremely complex inputs.
     In any case, without further protections, it's better to not allow untrusted users to supply arbitrary formulas.
-    Especially in crucial or sensitive applications, it's ideal to have a passlist of allowed operations and
+    Especially in crucial or sensitive applications, it's ideal to have a pass list of allowed operations and
     strictly parse the user input.
 
     :param formula_: f(x,y): string
@@ -244,23 +244,48 @@ def calculate_z(formula_, x_, y_, z_dim):
     return result_quant
 
 
-def calculate_formula_dimension(formula_, x_, y_, z_dim):
+def convert_pint_quantity_to_fundamental_unit(n_quantity):
     """
-    :param z_dim: unit fo the calculation result: string
+    :param n_quantity: Pint Quantity object
+    :return: fundamental_unit: Pint Quantity object with scalar value = 1
+    """
+    try:
+        fundamental_unit = (1 / n_quantity.magnitude) * n_quantity
+    except ZeroDivisionError as e:
+        print("Error: Division by zero. Please, provide non-zero quantity.", e)
+        # Handle the error, could be either re-raising, returning a default value, etc.
+        fundamental_unit = None
+    return fundamental_unit
+
+
+def quantity_to_sympy(magnitude, units):
+    magnitude = S(magnitude)  # Convert magnitude to SymPy number
+    unit = S(units)  # Convert units to SymPy entity
+    return Mul(magnitude, unit)
+
+
+def calculate_formula_dimension(formula_, x_, y_):
+    """
     :param formula_: f(x,y): string
-    :param x_:
-    :param y_:
-    :return: z
+    :param x_: Pint's Quantity object
+    :param y_: Pint's Quantity object
+    :return: z ToDo Document the Type of the result: string?
     """
 
+    # create a pair of the magnitude of the value and its base units
     x_magnitude, x_base = is_dimensionless(x_)
     y_magnitude, y_base = is_dimensionless(y_)
 
+    # convert x_base and y_base to fundamental pint units with magnitude one
+    x_base = convert_pint_quantity_to_fundamental_unit(x_base)
+    y_base = convert_pint_quantity_to_fundamental_unit(y_base)
+
     # Substitute the base units into the symbolic formula
     x_sym, y_sym = symbols('x y')
-    sympy_x_base = create_sympy_quantity(x_magnitude, x_base)
-    sympy_y_base = create_sympy_quantity(y_magnitude, y_base)
+    sympy_x_base = quantity_to_sympy(x_magnitude, "{:~}".format(x_base.units))
+    sympy_y_base = quantity_to_sympy(y_magnitude, "{:~}".format(y_base.units))
     parsed_formula = None
+    print(formula_)
     try:
         parsed_formula = sympify(formula_)
     except Exception as e:
@@ -268,10 +293,17 @@ def calculate_formula_dimension(formula_, x_, y_, z_dim):
 
     # Do the actual numerical calculation using magnitudes
     unit_result = parsed_formula.subs({x_sym: sympy_x_base, y_sym: sympy_y_base})
+    print(parsed_formula, unit_result)
     return unit_result
 
 
 def is_dimensionless(value):
+    """
+    :param value: a unit-ed quantity object from the pint library
+        if the value is not of a type that has the to_base_units() method defined, the value is treated as dimensionless
+    :return: value.magnitude, base: a pair of the magnitude of the value and its base units.
+        the base unit is "" (dimensionless) if an AttributeError is raised
+    """
     try:
         base = value.to_base_units()
     except AttributeError:
@@ -533,8 +565,6 @@ class Contour:
         :return: None
         """
 
-
-
     def initialize_values(self):
         """
         Initializes the values required for the calculation and plotting of contours.
@@ -678,7 +708,7 @@ class Contour:
 
         # ToDo: See what happens if x_range[0] >= tick >= x_range[1]
         """        
-        in matplotlib.axex.base.py 3564: 
+        in matplotlib.axes.base.py 3564: 
         The x-axis may be inverted, in which case the *left* value will
         be greater than the *right* value. 
         """
@@ -742,6 +772,7 @@ class Contour:
         img = dia.contourf(self.X.magnitude, self.Y.magnitude, self.vals.magnitude, 35, zorder=0, cmap='Spectral')
         hl_with_unit = self.vals
         scaled_hl_with_unit = self.vals.to(self.dim_res)
+        # ToDo Local variable 'hl_scale_factor' value is not used
         hl_scale_factor = hl_with_unit[0, 0].magnitude / scaled_hl_with_unit[0, 0].magnitude
         self.hl = dia.contour(self.X.magnitude, self.Y.magnitude, self.vals.magnitude, 35, zorder=0, colors='black')
         plt.clabel(self.hl, inline=1, fontsize=12, fmt=lambda x: f"{x:.2g}")
@@ -772,7 +803,7 @@ class Contour:
 @click.argument('title', type=str)
 @click.argument('x_label', type=str)
 @click.argument('y_label', type=str)
-@click.argument('formula', type=str)
+@click.argument('equation', type=str)
 @click.argument('z_dim', type=str)
 @click.argument('x_start', type=float)
 @click.argument('x_stop', type=float)

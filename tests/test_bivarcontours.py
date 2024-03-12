@@ -57,7 +57,7 @@ def test_sanitize_filename(filename,expected_output):
 
 def test_bivarcontours():
     runner = CliRunner()
-    result = runner.invoke(cplot, ["a_add_b" "X" "Y" "x + y" "mm" "10" "15" "20" "cm" "10" "15" "20" "cm" "-nx" "-ny" "-v"])
+    result = runner.invoke(cplot, ["a_add_b", "X", "Y", "x + y", "mm", "10", "15", "20", "cm", "10", "15", "20", "cm", "-nx", "-ny", "-v"])
     assert result.exit_code == 0
 
 
@@ -69,7 +69,8 @@ def test_bivarcontours():
     (5 * UREG.meter, 2 * UREG.meter, 'x * y', UREG.meter ** 2),  # unit of multiplication result is meter**2
 ])
 def test_calculate_formula_dimension(formula, x_quant, y_quant, expected_dim):
-    result_dim = calculate_formula_dimension(formula, x_quant, y_quant, expected_dim)
+
+    result_dim = calculate_formula_dimension(formula, x_quant, y_quant)
     assert result_dim == expected_dim
 
 
